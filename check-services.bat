@@ -1,14 +1,14 @@
 @echo off
 REM ============================================================
-REM Secure Enterprise Chat - æœåŠ¡çŠ¶æ€æ£€æŸ¥è„šæœ¬
-REM æ£€æŸ¥åŽç«¯å’Œå‰ç«¯æœåŠ¡çš„è¿è¡ŒçŠ¶æ€
+REM Secure Enterprise Chat - ·þÎñ×´Ì¬¼ì²é½Å±¾
+REM ¼ì²éºó¶ËºÍÇ°¶Ë·þÎñµÄÔËÐÐ×´Ì¬
 REM ============================================================
 
 setlocal EnableDelayedExpansion
 
 echo.
 echo ============================================================
-echo    Secure Enterprise Chat - æœåŠ¡çŠ¶æ€æ£€æŸ¥
+echo    Secure Enterprise Chat - ·þÎñ×´Ì¬¼ì²é
 echo ============================================================
 echo.
 
@@ -19,94 +19,94 @@ set "CYAN=[96m"
 set "RESET=[0m"
 
 REM ============================================================
-REM æ£€æŸ¥ç«¯å£çŠ¶æ€
+REM ¼ì²é¶Ë¿Ú×´Ì¬
 REM ============================================================
 
-echo %CYAN%[ç«¯å£çŠ¶æ€]%RESET%
+echo %CYAN%[¶Ë¿Ú×´Ì¬]%RESET%
 echo.
 
-REM æ£€æŸ¥ 8081 ç«¯å£
+REM ¼ì²é 8081 ¶Ë¿Ú
 netstat -ano 2>nul | findstr ":8081" | findstr "LISTENING" >nul
 if %ERRORLEVEL% equ 0 (
-    echo   %GREEN%[è¿è¡Œä¸­] åŽç«¯æœåŠ¡ (ç«¯å£ 8081)%RESET%
+    echo   %GREEN%[ÔËÐÐÖÐ] ºó¶Ë·þÎñ (¶Ë¿Ú 8081)%RESET%
     set BACKEND_RUNNING=1
 ) else (
-    echo   %RED%[æœªè¿è¡Œ] åŽç«¯æœåŠ¡ (ç«¯å£ 8081)%RESET%
+    echo   %RED%[Î´ÔËÐÐ] ºó¶Ë·þÎñ (¶Ë¿Ú 8081)%RESET%
     set BACKEND_RUNNING=0
 )
 
-REM æ£€æŸ¥ 3000 ç«¯å£
+REM ¼ì²é 3000 ¶Ë¿Ú
 netstat -ano 2>nul | findstr ":3000" | findstr "LISTENING" >nul
 if %ERRORLEVEL% equ 0 (
-    echo   %GREEN%[è¿è¡Œä¸­] å‰ç«¯æœåŠ¡ (ç«¯å£ 3000)%RESET%
+    echo   %GREEN%[ÔËÐÐÖÐ] Ç°¶Ë·þÎñ (¶Ë¿Ú 3000)%RESET%
     set FRONTEND_RUNNING=1
 ) else (
-    echo   %RED%[æœªè¿è¡Œ] å‰ç«¯æœåŠ¡ (ç«¯å£ 3000)%RESET%
+    echo   %RED%[Î´ÔËÐÐ] Ç°¶Ë·þÎñ (¶Ë¿Ú 3000)%RESET%
     set FRONTEND_RUNNING=0
 )
 
 echo.
 
 REM ============================================================
-REM å¥åº·æ£€æŸ¥
+REM ½¡¿µ¼ì²é
 REM ============================================================
 
-echo %CYAN%[å¥åº·æ£€æŸ¥]%RESET%
+echo %CYAN%[½¡¿µ¼ì²é]%RESET%
 echo.
 
 if %BACKEND_RUNNING% equ 1 (
-    echo   æ£€æŸ¥åŽç«¯ API å¥åº·çŠ¶æ€...
+    echo   ¼ì²éºó¶Ë API ½¡¿µ×´Ì¬...
     curl -s http://localhost:8081/health > "%TEMP%\health_check.tmp" 2>nul
     if %ERRORLEVEL% equ 0 (
         type "%TEMP%\health_check.tmp" | findstr "ok" >nul
         if !ERRORLEVEL! equ 0 (
-            echo   %GREEN%[å¥åº·] åŽç«¯ API å“åº”æ­£å¸¸%RESET%
-            echo   å“åº”: 
+            echo   %GREEN%[½¡¿µ] ºó¶Ë API ÏìÓ¦Õý³£%RESET%
+            echo   ÏìÓ¦: 
             type "%TEMP%\health_check.tmp"
             echo.
         ) else (
-            echo   %YELLOW%[è­¦å‘Š] åŽç«¯ API å“åº”å¼‚å¸¸%RESET%
+            echo   %YELLOW%[¾¯¸æ] ºó¶Ë API ÏìÓ¦Òì³£%RESET%
         )
         del "%TEMP%\health_check.tmp" 2>nul
     ) else (
-        echo   %RED%[é”™è¯¯] æ— æ³•è¿žæŽ¥åˆ°åŽç«¯ API%RESET%
+        echo   %RED%[´íÎó] ÎÞ·¨Á¬½Óµ½ºó¶Ë API%RESET%
     )
 ) else (
-    echo   %YELLOW%[è·³è¿‡] åŽç«¯æœåŠ¡æœªè¿è¡Œï¼Œè·³è¿‡å¥åº·æ£€æŸ¥%RESET%
+    echo   %YELLOW%[Ìø¹ý] ºó¶Ë·þÎñÎ´ÔËÐÐ£¬Ìø¹ý½¡¿µ¼ì²é%RESET%
 )
 
 echo.
 
 REM ============================================================
-REM æ˜¾ç¤ºè®¿é—®åœ°å€
+REM ÏÔÊ¾·ÃÎÊµØÖ·
 REM ============================================================
 
-echo %CYAN%[è®¿é—®åœ°å€]%RESET%
+echo %CYAN%[·ÃÎÊµØÖ·]%RESET%
 echo.
-echo   æœ¬åœ°è®¿é—®:
+echo   ±¾µØ·ÃÎÊ:
 echo   ------------------------------------------------------------
-echo   åŽç«¯ API:     http://localhost:8081/api/v1
-echo   å¥åº·æ£€æŸ¥:     http://localhost:8081/health
+echo   ºó¶Ë API:     http://localhost:8081/api/v1
+echo   ½¡¿µ¼ì²é:     http://localhost:8081/health
 echo   WebSocket:    ws://localhost:8081/api/v1/ws
-echo   å‰ç«¯ Web:     http://localhost:3000
+echo   Ç°¶Ë Web:     http://localhost:3000
 echo.
-echo   å¤–ç½‘è®¿é—® (172.25.194.201):
+echo   ÍâÍø·ÃÎÊ (172.25.194.201):
 echo   ------------------------------------------------------------
-echo   åŽç«¯ API:     http://172.25.194.201:8081/api/v1
-echo   å¥åº·æ£€æŸ¥:     http://172.25.194.201:8081/health
+echo   ºó¶Ë API:     http://172.25.194.201:8081/api/v1
+echo   ½¡¿µ¼ì²é:     http://172.25.194.201:8081/health
 echo   WebSocket:    ws://172.25.194.201:8081/api/v1/ws
-echo   å‰ç«¯ Web:     http://172.25.194.201:3000
+echo   Ç°¶Ë Web:     http://172.25.194.201:3000
 echo.
 
 REM ============================================================
-REM æ˜¾ç¤ºè¿›ç¨‹è¯¦æƒ…
+REM ÏÔÊ¾½ø³ÌÏêÇé
 REM ============================================================
 
-echo %CYAN%[è¿›ç¨‹è¯¦æƒ…]%RESET%
+echo %CYAN%[½ø³ÌÏêÇé]%RESET%
 echo.
 
 if %BACKEND_RUNNING% equ 1 (
-    echo   åŽç«¯æœåŠ¡è¿›ç¨‹:
+    echo   ºó¶Ë·þÎñ½ø³Ì:
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8081" ^| findstr "LISTENING"') do (
         echo   PID: %%p
         tasklist /FI "PID eq %%p" /FO TABLE /NH 2>nul | findstr /v "INFO"
@@ -115,7 +115,7 @@ if %BACKEND_RUNNING% equ 1 (
 )
 
 if %FRONTEND_RUNNING% equ 1 (
-    echo   å‰ç«¯æœåŠ¡è¿›ç¨‹:
+    echo   Ç°¶Ë·þÎñ½ø³Ì:
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":3000" ^| findstr "LISTENING"') do (
         echo   PID: %%p
         tasklist /FI "PID eq %%p" /FO TABLE /NH 2>nul | findstr /v "INFO"
@@ -124,16 +124,16 @@ if %FRONTEND_RUNNING% equ 1 (
 )
 
 echo ============================================================
-echo %GREEN%   çŠ¶æ€æ£€æŸ¥å®Œæˆï¼%RESET%
+echo %GREEN%   ×´Ì¬¼ì²éÍê³É£¡%RESET%
 echo ============================================================
 echo.
 
 if %BACKEND_RUNNING% equ 0 (
-    echo   %YELLOW%æç¤º: åŽç«¯æœåŠ¡æœªè¿è¡Œï¼Œè¯·è¿è¡Œ start-services.bat å¯åŠ¨æœåŠ¡%RESET%
+    echo   %YELLOW%ÌáÊ¾: ºó¶Ë·þÎñÎ´ÔËÐÐ£¬ÇëÔËÐÐ start-services.bat Æô¶¯·þÎñ%RESET%
 )
 
 if %FRONTEND_RUNNING% equ 0 (
-    echo   %YELLOW%æç¤º: å‰ç«¯æœåŠ¡æœªè¿è¡Œï¼Œè¯·è¿è¡Œ start-services.bat å¯åŠ¨æœåŠ¡%RESET%
+    echo   %YELLOW%ÌáÊ¾: Ç°¶Ë·þÎñÎ´ÔËÐÐ£¬ÇëÔËÐÐ start-services.bat Æô¶¯·þÎñ%RESET%
 )
 
 echo.
