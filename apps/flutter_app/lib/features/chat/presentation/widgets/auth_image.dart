@@ -1,0 +1,255 @@
+import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:photo_view/photo_view.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../core/security/secure_storage.dart';
+import '../../../../core/network/server_config_service.dart';
+
+/// 获取认证headers
+Future<Map<String, String>> getAuthHeaders() async {
+  final storage = getIt<SecureStorageService>();
+  final token = await storage.getAccessToken();
+  return {
+    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+  };
+}
+
+/// 获取完整的图片URL
+Future<String> getFullImageUrl(String? url) async {
+  if (url == null || url.isEmpty) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  final config = await ServerConfigService.loadConfig();
+  // 检查 URL 是否已经包含 /api/v1 前缀，避免重复添加
+  if (url.startsWith('/api/v1/')) {
+    final hostUrl = 'http://${config.host}:${config.port}';
+    return '$hostUrl$url';
+  }
+  final baseUrl = ServerConfigService.buildApiBaseUrl(config.host, config.port);
+  return '$baseUrl$url';
+}
+
+/// 支持认证的网络图片组件
+class AuthNetworkImage extends StatefulWidget {
+  final String? imageUrl;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final Widget? placeholder;
+  final Widget? errorWidget;
+  final String? thumbnailUrl;
+
+  const AuthNetworkImage({
+    super.key,
+    required this.imageUrl,
+    this.width,
+    this.height,
+    this.fit = BoxFit.contain, // 使用 contain 保持图片比例，避免拉伸
+    this.placeholder,
+    this.errorWidget,
+    this.thumbnailUrl,
+  });
+
+  @override
+  State<AuthNetworkImage> createState() => _AuthNetworkImageState();
+}
+
+class _AuthNetworkImageState extends State<AuthNetworkImage> {
+  Map<String, String> _headers = {};
+  String _fullUrl = '';
+  String? _thumbnailUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHeaders();
+  }
+
+  @override
+  void didUpdateWidget(AuthNetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl || oldWidget.thumbnailUrl != widget.thumbnailUrl) {
+      _loadHeaders();
+    }
+  }
+
+  Future<void> _loadHeaders() async {
+    _headers = await getAuthHeaders();
+    _fullUrl = await getFullImageUrl(widget.imageUrl);
+    _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_fullUrl.isEmpty) {
+      return widget.errorWidget ?? _buildDefaultErrorWidget();
+    }
+
+    final displayUrl = _thumbnailUrl ?? _fullUrl;
+
+    return CachedNetworkImage(
+      imageUrl: displayUrl,
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      httpHeaders: _headers,
+      placeholder: widget.placeholder != null
+          ? (context, url) => widget.placeholder!
+          : (context, url) => Container(
+              width: widget.width,
+              height: widget.height,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+      errorWidget: widget.errorWidget != null
+          ? (context, url, error) => widget.errorWidget!
+          : (context, url, error) => _buildDefaultErrorWidget(),
+    );
+  }
+
+  Widget _buildDefaultErrorWidget() {
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      color: Theme.of(context).colorScheme.errorContainer,
+      child: Center(
+        child: Icon(
+          Icons.broken_image,
+          color: Theme.of(context).colorScheme.onErrorContainer,
+          size: 32,
+        ),
+      ),
+    );
+  }
+}
+
+/// 支持认证的图片查看器（支持缩放和平移）
+class AuthPhotoView extends StatefulWidget {
+  final String? imageUrl;
+  final String? thumbnailUrl;
+  final Widget? loadingBuilder;
+  final Widget? errorBuilder;
+  final Color? backgroundColor;
+
+  const AuthPhotoView({
+    super.key,
+    required this.imageUrl,
+    this.thumbnailUrl,
+    this.loadingBuilder,
+    this.errorBuilder,
+    this.backgroundColor,
+  });
+
+  @override
+  State<AuthPhotoView> createState() => _AuthPhotoViewState();
+}
+
+class _AuthPhotoViewState extends State<AuthPhotoView> {
+  Map<String, String> _headers = {};
+  String _fullUrl = '';
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHeaders();
+  }
+
+  @override
+  void didUpdateWidget(AuthPhotoView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _loadHeaders();
+    }
+  }
+
+  Future<void> _loadHeaders() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+
+    _headers = await getAuthHeaders();
+    _fullUrl = await getFullImageUrl(widget.imageUrl);
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return widget.loadingBuilder ?? const Center(child: CircularProgressIndicator());
+    }
+
+    if (_fullUrl.isEmpty || _hasError) {
+      return widget.errorBuilder ?? Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.broken_image, size: 64, color: Colors.white54),
+            const SizedBox(height: 16),
+            const Text('图片加载失败', style: TextStyle(color: Colors.white54)),
+          ],
+        ),
+      );
+    }
+
+    return PhotoView(
+      imageProvider: CachedNetworkImageProvider(
+        _fullUrl,
+        headers: _headers,
+      ),
+      backgroundDecoration: BoxDecoration(
+        color: widget.backgroundColor ?? Colors.black,
+      ),
+      minScale: PhotoViewComputedScale.contained,
+      maxScale: PhotoViewComputedScale.covered * 4.0,
+      // 使用 covered 作为初始缩放，让图片填满屏幕宽度，消除两侧黑边
+      initialScale: PhotoViewComputedScale.covered,
+      filterQuality: FilterQuality.high,
+      loadingBuilder: (context, event) {
+        return widget.loadingBuilder ?? Center(
+          child: CircularProgressIndicator(
+            value: event?.expectedTotalBytes != null
+                ? event!.cumulativeBytesLoaded / event.expectedTotalBytes!
+                : null,
+            color: Colors.white,
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return widget.errorBuilder ?? Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.broken_image, size: 64, color: Colors.white54),
+              const SizedBox(height: 16),
+              const Text('图片加载失败', style: TextStyle(color: Colors.white54)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _hasError = false;
+                    _isLoading = true;
+                  });
+                  _loadHeaders();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

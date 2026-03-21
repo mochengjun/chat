@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 企业内网应用 - 允许所有 HTTP 明文流量 -->
+    <!-- 这是必要的，因为用户可以自定义服务器地址 -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- 特定域名配置（保留以便将来需要） -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- ZeroTier 网络 -->
+        <domain includeSubdomains="true">172.25.118.254</domain>
+        <!-- ZeroTier 网段 -->
+        <domain includeSubdomains="true">172.25.0.0</domain>
+        <!-- Android 模拟器宿主机 -->
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- 本地开发 -->
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <!-- 常见内网网段 -->
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+    </domain-config>
+</network-security-config>

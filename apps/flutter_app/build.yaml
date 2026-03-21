@@ -1,0 +1,5 @@
+targets:
+  $default:
+    builders:
+      sqlite3|sqlite3_download:
+        enabled: false

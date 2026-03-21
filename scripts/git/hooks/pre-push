@@ -1,0 +1,80 @@
+#!/bin/bash
+#
+# Git pre-push hook
+# 推送前检查
+#
+# 安装方法:
+#   1. 复制此文件到 .git/hooks/pre-push
+#   2. 添加执行权限: chmod +x .git/hooks/pre-push
+#
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}推送前检查${NC}"
+echo -e "${BLUE}========================================${NC}"
+
+# 读取推送信息
+while read local_ref local_oid remote_ref remote_oid; do
+    # 获取远程名称和分支
+    REMOTE_NAME=$(echo "$remote_ref" | sed 's|refs/heads/||')
+    
+    echo -e "${YELLOW}检查分支: ${REMOTE_NAME}${NC}"
+done
+
+# 检查是否有未提交的更改
+if [[ -n $(git status --porcelain) ]]; then
+    echo -e "${YELLOW}警告: 有未提交的更改${NC}"
+    git status --short
+fi
+
+# 检查是否有敏感文件
+SENSITIVE_FILES=(
+    ".env"
+    ".env.local"
+    ".env.production"
+    "*.key"
+    "*.pem"
+    "credentials/"
+    "secrets/"
+)
+
+FOUND_SENSITIVE=false
+for pattern in "${SENSITIVE_FILES[@]}"; do
+    if git diff --cached --name-only | grep -q "$pattern"; then
+        echo -e "${RED}错误: 检测到敏感文件: $pattern${NC}"
+        FOUND_SENSITIVE=true
+    fi
+done
+
+if [[ "$FOUND_SENSITIVE" == "true" ]]; then
+    echo ""
+    echo -e "${RED}禁止推送敏感文件！${NC}"
+    echo "请从暂存区移除这些文件:"
+    echo "  git reset HEAD -- <file>"
+    exit 1
+fi
+
+# 检查 main 分支是否受保护
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ "$CURRENT_BRANCH" == "main" ]]; then
+    echo ""
+    echo -e "${YELLOW}警告: 正在推送到 main 分支${NC}"
+    echo -e "${YELLOW}main 分支应通过 Pull Request 合并${NC}"
+    echo ""
+    read -p "确定要推送到 main 分支吗? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${GREEN}已取消推送${NC}"
+        exit 1
+    fi
+fi
+
+echo ""
+echo -e "${GREEN}✓ 推送前检查通过${NC}"
+exit 0
