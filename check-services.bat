@@ -90,12 +90,12 @@ echo   健康检查:     http://localhost:8081/health
 echo   WebSocket:    ws://localhost:8081/api/v1/ws
 echo   前端 Web:     http://localhost:3000
 echo.
-echo   外网访问 (172.25.118.254):
+echo   外网访问 (172.25.194.201):
 echo   ------------------------------------------------------------
-echo   后端 API:     http://172.25.118.254:8081/api/v1
-echo   健康检查:     http://172.25.118.254:8081/health
-echo   WebSocket:    ws://172.25.118.254:8081/api/v1/ws
-echo   前端 Web:     http://172.25.118.254:3000
+echo   后端 API:     http://172.25.194.201:8081/api/v1
+echo   健康检查:     http://172.25.194.201:8081/health
+echo   WebSocket:    ws://172.25.194.201:8081/api/v1/ws
+echo   前端 Web:     http://172.25.194.201:3000
 echo.
 
 REM ============================================================

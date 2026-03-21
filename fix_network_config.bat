@@ -84,7 +84,7 @@ REM 检查 Docker 配置文件
 set DOCKER_CONFIG=%ProgramData%\docker\config\daemon.json
 if exist "%DOCKER_CONFIG%" (
     echo ✓ Docker 配置文件存在
-    type "%DOCKER_CONFIG%" | findstr "172.25.118.254" >nul 2>&1
+    type "%DOCKER_CONFIG%" | findstr "172.25.194.201" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
         echo ✓ Docker 代理配置正确
     ) else (

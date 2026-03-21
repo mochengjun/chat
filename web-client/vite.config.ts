@@ -20,7 +20,7 @@ export default defineConfig({
     host: true, // 允许外网访问
     proxy: {
       '/api': {
-        target: 'http://172.25.118.254:8081',
+        target: 'http://172.25.194.201:8081',
         changeOrigin: true,
         ws: true, // 同时代理 WebSocket（/api/v1/ws）
       },

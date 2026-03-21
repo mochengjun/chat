@@ -91,8 +91,8 @@ echo 5. 在 https://my.zerotier.com 授权设备 >> "%FULL_PACKAGE_DIR%\ZeroTier
 echo. >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
 echo ## 网络配置详情 >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
 echo - 网络ID: 6AB565387A193124 >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
-echo - 分配IP段: 172.25.118.0/24 >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
-echo - 网关IP: 172.25.118.254 >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
+echo - 分配IP段: 172.25.194.0/24 >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
+echo - 网关IP: 172.25.194.201 >> "%FULL_PACKAGE_DIR%\ZeroTier_Setup_Guide.txt"
 
 REM 创建Docker代理配置说明
 echo # Docker代理配置说明 > "%FULL_PACKAGE_DIR%\Docker_Proxy_Config.txt"
@@ -136,7 +136,7 @@ echo   - AAB: %OUTPUT_DIR%\SecChat-Android-%APP_VERSION%.aab
 echo   - 完整包: %OUTPUT_DIR%\%FULL_ZIP_NAME%
 echo.
 echo 包含的网络配置:
-echo   ✓ ZeroTier网络配置 (172.25.118.0/24)
+echo   ✓ ZeroTier网络配置 (172.25.194.0/24)
 echo   ✓ Docker代理设置说明
 echo   ✓ 网络安全配置
 echo.

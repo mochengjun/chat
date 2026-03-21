@@ -70,7 +70,7 @@ class _LoginPageState extends State<LoginPage> {
                 controller: hostController,
                 decoration: const InputDecoration(
                   labelText: '服务器地址',
-                  hintText: '例如: 172.25.118.254',
+                  hintText: '例如: 172.25.194.201',
                   prefixIcon: Icon(Icons.dns_outlined),
                 ),
                 keyboardType: TextInputType.url,

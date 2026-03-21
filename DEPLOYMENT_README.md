@@ -70,7 +70,7 @@ flutter build windows --release
 validate_deployment.bat
 
 # 测试API连接
-curl http://172.25.118.254:8081/health
+curl http://172.25.194.201:8081/health
 
 # 验证ZeroTier连接
 "C:\Program Files (x86)\ZeroTier\One\zerotier-cli.bat" listnetworks
@@ -140,13 +140,13 @@ build-android-full.bat
 ```yaml
 # ZeroTier配置
 network_id: 6AB565387A193124
-gateway_ip: 172.25.118.254
+gateway_ip: 172.25.194.201
 node_id: b239bac9cc  # 当前节点ID
 proxy_port: 9993
 
 # Docker代理配置
-http_proxy: http://172.25.118.254:9993
-https_proxy: http://172.25.118.254:9993
+http_proxy: http://172.25.194.201:9993
+https_proxy: http://172.25.194.201:9993
 no_proxy: localhost,127.0.0.1,hubproxy.docker.internal
 
 # 镜像加速器
@@ -156,7 +156,7 @@ mirrors:
   - https://mirror.baidubce.com
 
 # 客户端网络配置
-windows_client_ip: 172.25.118.254
+windows_client_ip: 172.25.194.201
 api_port: 8081
 websocket_port: 8082
 ```
@@ -165,7 +165,7 @@ websocket_port: 8082
 
 **Windows客户端**:
 - 自动检测ZeroTier网络连接状态
-- 动态API服务器地址配置(172.25.118.254:8081)
+- 动态API服务器地址配置(172.25.194.201:8081)
 - 集成Docker代理设置验证
 - 网络诊断工具集成
 - 便携式ZIP包生成支持
@@ -190,10 +190,10 @@ websocket_port: 8082
 
 ### 部署前检查
 - [ ] ZeroTier网络连接正常(网络ID: 6AB565387A193124)
-- [ ] Docker代理配置正确(172.25.118.254:9993)
+- [ ] Docker代理配置正确(172.25.194.201:9993)
 - [ ] 镜像加速器配置生效
 - [ ] 基础设施服务启动(数据库、缓存、API)
-- [ ] API接口响应正常(http://172.25.118.254:8081/health)
+- [ ] API接口响应正常(http://172.25.194.201:8081/health)
 - [ ] 客户端网络配置验证通过
 - [ ] Windows安装包功能测试完成
 - [ ] Android客户端构建验证通过
@@ -298,7 +298,7 @@ A: 清理构建缓存，更新依赖包
 - BIND_VPN_SERVICE: ZeroTier VPN支持
 
 **网络安全配置**:
-- 支持ZeroTier网络段(172.25.118.0/24)
+- 支持ZeroTier网络段(172.25.194.0/24)
 - Docker容器网络支持
 - 国内镜像源配置
 

@@ -6,7 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 class NetworkConfig {
   // ZeroTier网络配置
   static const String zeroTierNetworkId = '6AB565387A193124';
-  static const String zeroTierGatewayIp = '172.25.118.254';
+  static const String zeroTierGatewayIp = '172.25.194.201';
   static const int zeroTierUdpPort = 9993; // ZeroTier UDP通信端口（勿用作HTTP代理）
   
   // HTTP代理配置（独立于ZeroTier端口）
@@ -21,7 +21,7 @@ class NetworkConfig {
   ];
   
   // 默认服务器配置
-  static const String defaultServerHost = '172.25.118.254';
+  static const String defaultServerHost = '172.25.194.201';
   static const int defaultServerPort = 8081;
   
   // 网络检测相关

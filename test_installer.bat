@@ -134,7 +134,7 @@ if %ERRORLEVEL% equ 0 (
     echo 程序启动: 成功 >> "%TEST_REPORT_DIR%\test_report.txt"
     
     REM 检查网络连接尝试
-    netstat -an | findstr "172.25.118.254" >nul
+    netstat -an | findstr "172.25.194.201" >nul
     if %ERRORLEVEL% equ 0 (
         echo ✓ 检测到ZeroTier网络连接尝试
         echo 网络连接: 检测到 >> "%TEST_REPORT_DIR%\test_report.txt"
@@ -184,7 +184,7 @@ echo === API连接测试 === >> "%TEST_REPORT_DIR%\test_report.txt"
 
 REM 测试与服务器的连接
 echo 测试API服务器连接...
-powershell -Command "try { $response = Invoke-WebRequest -Uri 'http://172.25.118.254:8081/health' -TimeoutSec 10; Write-Output '✓ API服务器连接正常'; Write-Output ('HTTP状态: ' + $response.StatusCode) } catch { Write-Output '✗ API服务器连接失败'; Write-Output ('错误: ' + $_.Exception.Message) }" 2>&1
+powershell -Command "try { $response = Invoke-WebRequest -Uri 'http://172.25.194.201:8081/health' -TimeoutSec 10; Write-Output '✓ API服务器连接正常'; Write-Output ('HTTP状态: ' + $response.StatusCode) } catch { Write-Output '✗ API服务器连接失败'; Write-Output ('错误: ' + $_.Exception.Message) }" 2>&1
 echo 测试结果已记录 >> "%TEST_REPORT_DIR%\test_report.txt"
 
 echo.

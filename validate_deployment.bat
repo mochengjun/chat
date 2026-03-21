@@ -196,7 +196,7 @@ if %ERRORLEVEL% equ 0 (
 
 REM ZeroTier网络测试
 echo 测试ZeroTier网络连通性...
-ping -n 3 172.25.118.254 >> "%REPORT_DIR%\full_validation_report.txt" 2>nul
+ping -n 3 172.25.194.201 >> "%REPORT_DIR%\full_validation_report.txt" 2>nul
 if %ERRORLEVEL% equ 0 (
     echo ✓ ZeroTier网关可达
     echo ZeroTier网关: 可达 >> "%REPORT_DIR%\full_validation_report.txt"
@@ -229,7 +229,7 @@ REM 详细API测试
 echo 执行API健康检查...
 powershell -Command "
 try {
-    $response = Invoke-WebRequest -Uri 'http://172.25.118.254:8081/health' -TimeoutSec 15 -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri 'http://172.25.194.201:8081/health' -TimeoutSec 15 -ErrorAction Stop
     Write-Output '✓ Auth API服务正常'
     Write-Output ('HTTP状态码: ' + $response.StatusCode)
     Write-Output ('响应内容: ' + $response.Content)
