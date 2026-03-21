@@ -1,0 +1,16 @@
+contact_links:
+  - name: 📖 查看文档
+    url: https://github.com/mochengjun/sec-chat#readme
+    about: 查看项目文档和常见问题解答
+
+  - name: 💬 讨论区
+    url: https://github.com/mochengjun/sec-chat/discussions
+    about: 参与社区讨论，分享经验和建议
+
+  - name: 🔒 安全问题
+    url: mailto:security@example.com
+    about: 报告安全漏洞请发送邮件（敏感信息请勿公开）
+
+  - name: 🐦 Gitee 镜像
+    url: https://gitee.com/mochengjun/sec-chat
+    about: 国内用户可访问 Gitee 镜像仓库

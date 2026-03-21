@@ -1,0 +1,53 @@
+{
+  "test_summary": {
+    "total_tests": 7,
+    "passed_tests": 5,
+    "failed_tests": 2,
+    "pass_rate": "71.4%",
+    "test_date": "2026-03-20T21:44:21.310966"
+  },
+  "test_results": [
+    {
+      "test_name": "应用启动",
+      "passed": false,
+      "details": "应用未在前台运行",
+      "timestamp": "2026-03-20T21:43:51.705065"
+    },
+    {
+      "test_name": "权限检查-INTERNET",
+      "passed": true,
+      "details": "android.permission.INTERNET 已授权",
+      "timestamp": "2026-03-20T21:43:51.831432"
+    },
+    {
+      "test_name": "权限检查-ACCESS_NETWORK_STATE",
+      "passed": true,
+      "details": "android.permission.ACCESS_NETWORK_STATE 已授权",
+      "timestamp": "2026-03-20T21:43:51.890786"
+    },
+    {
+      "test_name": "权限检查-CAMERA",
+      "passed": true,
+      "details": "android.permission.CAMERA 已授权",
+      "timestamp": "2026-03-20T21:43:51.946559"
+    },
+    {
+      "test_name": "权限检查-POST_NOTIFICATIONS",
+      "passed": true,
+      "details": "android.permission.POST_NOTIFICATIONS 已授权",
+      "timestamp": "2026-03-20T21:43:52.033235"
+    },
+    {
+      "test_name": "网络连接",
+      "passed": false,
+      "details": "网络连接失败",
+      "timestamp": "2026-03-20T21:44:02.118754"
+    },
+    {
+      "test_name": "应用稳定性",
+      "passed": true,
+      "details": "应用可以正常重启",
+      "timestamp": "2026-03-20T21:44:20.510655"
+    }
+  ]
+}

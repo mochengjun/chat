@@ -1,0 +1,60 @@
+name: 文档问题
+description: 报告文档错误或请求文档更新
+title: "[Docs]: "
+labels: ["documentation", "triage"]
+assignees: []
+body:
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: 文档类型
+      options:
+        - README
+        - API 文档
+        - 部署文档
+        - 开发指南
+        - CHANGELOG
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: 问题类型
+      options:
+        - 内容错误
+        - 内容缺失
+        - 内容过时
+        - 链接失效
+        - 格式问题
+        - 改进建议
+    validations:
+      required: true
+
+  - type: input
+    id: doc-location
+    attributes:
+      label: 文档位置
+      description: 文档的文件路径或 URL
+      placeholder: "docs/api/authentication.md"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-content
+    attributes:
+      label: 当前内容
+      description: 当前文档的内容（如有问题）
+
+  - type: textarea
+    id: expected-content
+    attributes:
+      label: 期望内容
+      description: 您认为应该如何修改
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 附加信息
+      description: 其他相关信息

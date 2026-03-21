@@ -1,0 +1,48 @@
+name: 配置请求
+description: 配置文件或环境变量相关请求
+title: "[Config]: "
+labels: ["config", "triage"]
+assignees: []
+body:
+  - type: dropdown
+    id: config-type
+    attributes:
+      label: 配置类型
+      options:
+        - Docker Compose
+        - Kubernetes
+        - 环境变量
+        - Nginx
+        - 监控配置
+        - CI/CD
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 描述
+      description: 详细描述配置需求
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-config
+    attributes:
+      label: 当前配置
+      description: 当前的配置内容（如有）
+      render: yaml
+
+  - type: textarea
+    id: expected-config
+    attributes:
+      label: 期望配置
+      description: 期望的配置内容
+      render: yaml
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 附加信息
+      description: 其他相关信息

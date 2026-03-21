@@ -1,0 +1,432 @@
+# ============================================================
+# Release Workflow
+# 自动发布流程 - 基于 Git 标签触发
+# ============================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Pre-release version'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GO_VERSION: '1.23'
+  NODE_VERSION: '20'
+  FLUTTER_VERSION: '3.16.0'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ============================================================
+  # Prepare Release
+  # ============================================================
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            PRERELEASE="${{ github.event.inputs.prerelease }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            # 判断是否为预发布版本
+            if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+              PRERELEASE="true"
+            else
+              PRERELEASE="false"
+            fi
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+          echo "🏷️ Pre-release: $PRERELEASE"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # 获取上一个标签
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "📝 生成 $PREV_TAG 到 ${{ steps.version.outputs.version }} 的变更日志..."
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD)
+          else
+            echo "📝 生成初始发布变更日志..."
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" HEAD~20..HEAD)
+          fi
+          
+          # 保存到文件以便多行输出
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # ============================================================
+  # Build Flutter App
+  # ============================================================
+  build-flutter:
+    name: Build Flutter App
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        working-directory: apps/flutter_app
+        run: flutter pub get
+
+      - name: Build Android APK
+        working-directory: apps/flutter_app
+        run: |
+          flutter build apk --release
+          flutter build apk --release --split-per-abi
+
+      - name: Build Web
+        working-directory: apps/flutter_app
+        run: flutter build web --release
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-android
+          path: |
+            apps/flutter_app/build/app/outputs/flutter-apk/app-release.apk
+            apps/flutter_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            apps/flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            apps/flutter_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
+          retention-days: 30
+
+      - name: Upload Web Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web
+          path: apps/flutter_app/build/web
+          retention-days: 30
+
+  # ============================================================
+  # Build Web Client
+  # ============================================================
+  build-web:
+    name: Build Web Client
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: '8'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: web-client/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web-client
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: web-client
+        run: pnpm build
+        env:
+          NODE_ENV: production
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-client-dist
+          path: web-client/dist
+          retention-days: 30
+
+  # ============================================================
+  # Build Go Services
+  # ============================================================
+  build-services:
+    name: Build Go Services
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - push-service
+          - media-proxy
+          - admin-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/${{ matrix.service }}/go.sum
+
+      - name: Build
+        working-directory: services/${{ matrix.service }}
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-w -s -X main.Version=${{ needs.prepare.outputs.version }}" \
+            -o ${{ matrix.service }} ./cmd/main.go
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}
+          path: services/${{ matrix.service }}/${{ matrix.service }}
+          retention-days: 30
+
+  # ============================================================
+  # Build Docker Images
+  # ============================================================
+  docker-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [prepare, build-services]
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - push-service
+          - media-proxy
+          - admin-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ needs.prepare.outputs.version }}
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================
+  # Create GitHub Release
+  # ============================================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [prepare, build-flutter, build-web, docker-images]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Flutter Android APK
+          if [ -d "artifacts/flutter-android" ]; then
+            cp artifacts/flutter-android/*.apk release-assets/ || true
+          fi
+          
+          # Flutter Web (compressed)
+          if [ -d "artifacts/flutter-web" ]; then
+            cd artifacts/flutter-web
+            zip -r ../../release-assets/flutter-web-${{ needs.prepare.outputs.version }}.zip .
+            cd -
+          fi
+          
+          # Web Client (compressed)
+          if [ -d "artifacts/web-client-dist" ]; then
+            cd artifacts/web-client-dist
+            zip -r ../../release-assets/web-client-${{ needs.prepare.outputs.version }}.zip .
+            cd -
+          fi
+          
+          # Go services binaries
+          for service in auth-service push-service media-proxy admin-service; do
+            if [ -f "artifacts/$service/$service" ]; then
+              cp artifacts/$service/$service release-assets/$service-${{ needs.prepare.outputs.version }}-linux-amd64
+            fi
+          done
+          
+          echo "📁 Release assets:"
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: Release ${{ needs.prepare.outputs.version }}
+          body: |
+            ## 🚀 Release ${{ needs.prepare.outputs.version }}
+            
+            ### 📝 变更日志
+            
+            ${{ needs.prepare.outputs.changelog }}
+            
+            ### 📦 下载
+            
+            | 组件 | 文件 |
+            |------|------|
+            | Flutter Android | `app-release.apk` |
+            | Flutter Web | `flutter-web-${{ needs.prepare.outputs.version }}.zip` |
+            | Web Client | `web-client-${{ needs.prepare.outputs.version }}.zip` |
+            
+            ### 🐳 Docker 镜像
+            
+            ```bash
+            docker pull ghcr.io/mochengjun/sec-chat/auth-service:${{ needs.prepare.outputs.version }}
+            docker pull ghcr.io/mochengjun/sec-chat/push-service:${{ needs.prepare.outputs.version }}
+            ```
+            
+            ### 🔗 镜像仓库
+            
+            - GitHub: https://github.com/mochengjun/sec-chat
+            - Gitee: https://gitee.com/mochengjun/sec-chat
+          files: release-assets/*
+          draft: false
+          prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
+          generate_release_notes: false
+
+      - name: Sync to Gitee
+        run: |
+          git remote add gitee https://${{ secrets.GITEE_TOKEN }}@gitee.com/mochengjun/sec-chat.git
+          git push gitee --tags
+          echo "✅ 标签已同步到 Gitee"
+
+  # ============================================================
+  # Update CHANGELOG.md
+  # ============================================================
+  update-changelog:
+    name: Update CHANGELOG.md
+    runs-on: ubuntu-latest
+    needs: [prepare, create-release]
+    if: needs.prepare.outputs.prerelease != 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DATE=$(date +%Y-%m-%d)
+          
+          # 在文件开头添加新版本记录
+          if [ -f CHANGELOG.md ]; then
+            # 读取现有内容
+            tail -n +3 CHANGELOG.md > temp_changelog.txt
+            
+            # 写入新内容
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "## [$VERSION] - $DATE" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "${{ needs.prepare.outputs.changelog }}" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            cat temp_changelog.txt >> CHANGELOG.md
+            rm temp_changelog.txt
+          else
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "## [$VERSION] - $DATE" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "${{ needs.prepare.outputs.changelog }}" >> CHANGELOG.md
+          fi
+
+      - name: Commit CHANGELOG.md
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for ${{ needs.prepare.outputs.version }}" || echo "No changes to commit"
+          git push origin HEAD:main
+
+  # ============================================================
+  # Notify
+  # ============================================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: always()
+    steps:
+      - name: Send notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "🎉 New Release: ${{ needs.prepare.outputs.version }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*🎉 New Release Published!*\n\n*Version:* ${{ needs.prepare.outputs.version }}\n*Pre-release:* ${{ needs.prepare.outputs.prerelease }}\n\n<https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }}|View Release>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: success() && env.SLACK_WEBHOOK_URL != ''

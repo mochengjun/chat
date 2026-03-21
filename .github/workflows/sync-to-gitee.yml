@@ -1,0 +1,121 @@
+# ============================================================
+# Sync to Gitee Workflow
+# 自动同步代码到 Gitee 镜像仓库
+# ============================================================
+
+name: Sync to Gitee
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      sync_all:
+        description: 'Sync all branches and tags'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  GITEE_REPO: mochengjun/sec-chat
+  GITHUB_REPO: mochengjun/sec-chat
+
+jobs:
+  sync:
+    name: Sync to Gitee
+    runs-on: ubuntu-latest
+    if: github.repository == 'mochengjun/sec-chat'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Add Gitee remote
+        run: |
+          git remote add gitee https://${{ secrets.GITEE_TOKEN }}@gitee.com/${{ env.GITEE_REPO }}.git
+          git remote -v
+
+      - name: Sync branches
+        run: |
+          echo "🔄 开始同步分支到 Gitee..."
+          
+          # 获取当前分支
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+          
+          if [[ "${{ github.event.inputs.sync_all }}" == "true" ]]; then
+            echo "📦 同步所有分支..."
+            git push gitee --all --force
+          else
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              # 标签推送
+              TAG_NAME="${GITHUB_REF#refs/tags/}"
+              echo "🏷️ 同步标签: $TAG_NAME"
+              git push gitee "refs/tags/$TAG_NAME"
+            else
+              # 分支推送
+              echo "🌿 同步分支: $CURRENT_BRANCH"
+              git push gitee "$CURRENT_BRANCH" --force-with-lease
+            fi
+          fi
+
+      - name: Sync tags
+        if: github.event.inputs.sync_all == 'true' || startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "🏷️ 同步标签到 Gitee..."
+          
+          if [[ "${{ github.event.inputs.sync_all }}" == "true" ]]; then
+            git push gitee --tags --force
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            git push gitee "refs/tags/$TAG_NAME"
+          fi
+
+      - name: Verify sync
+        run: |
+          echo "✅ 验证同步结果..."
+          echo ""
+          echo "GitHub 仓库: https://github.com/${{ env.GITHUB_REPO }}"
+          echo "Gitee 仓库:  https://gitee.com/${{ env.GITEE_REPO }}"
+          echo ""
+          
+          # 显示远程分支
+          echo "📋 GitHub 分支:"
+          git ls-remote --heads origin | head -10
+          echo ""
+          echo "📋 Gitee 分支:"
+          git ls-remote --heads gitee | head -10
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "🎉 同步成功！"
+          echo ""
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            echo "标签 $TAG_NAME 已同步到 Gitee"
+          else
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            echo "分支 $BRANCH_NAME 已同步到 Gitee"
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ 同步失败，请检查 Gitee Token 权限"
+          echo ""
+          echo "故障排除:"
+          echo "1. 确认 GITEE_TOKEN secret 已正确配置"
+          echo "2. 确认 Gitee Token 具有仓库写入权限"
+          echo "3. 确认 Gitee 仓库地址正确: ${{ env.GITEE_REPO }}"

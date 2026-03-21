@@ -1,0 +1,27 @@
+{
+  "cache_dir": ".cache",
+  "flutter": {
+    "enabled": true,
+    "pub_cache": true,
+    "gradle_cache": true,
+    "mirrors": {
+      "pub": "https://pub.flutter-io.cn",
+      "storage": "https://storage.flutter-io.cn"
+    }
+  },
+  "go": {
+    "enabled": true,
+    "mod_cache": true,
+    "proxy": "https://goproxy.cn,https://goproxy.io,direct",
+    "version": "1.23"
+  },
+  "nodejs": {
+    "enabled": true,
+    "npm_cache": true,
+    "registry": "https://registry.npmmirror.com"
+  },
+  "offline_mode": false,
+  "max_cache_size_gb": 10,
+  "cache_expiry_days": 30,
+  "verbose": false
+}

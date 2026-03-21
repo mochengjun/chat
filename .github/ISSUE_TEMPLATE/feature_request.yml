@@ -1,0 +1,85 @@
+name: 功能请求
+description: 提出一个新功能建议
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您的功能建议！请详细描述您的想法。
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 目标组件
+      options:
+        - Flutter App
+        - Web Client
+        - Auth Service
+        - Push Service
+        - Media Proxy
+        - Admin Service
+        - Infrastructure
+        - All Components
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 您希望解决的问题是什么？
+      placeholder: "我总是感到困扰，当..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望的解决方案
+      description: 您希望如何解决这个问题？
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案
+      description: 您考虑过的其他解决方案
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级
+      options:
+        - Low - 有了更好
+        - Medium - 会显著改善体验
+        - High - 非常重要
+        - Critical - 必须实现
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: 预估复杂度
+      options:
+        - Small - 1-2 天
+        - Medium - 3-5 天
+        - Large - 1-2 周
+        - Extra Large - 超过 2 周
+    validations:
+      required: false
+
+  - type: textarea
+    id: mockup
+    attributes:
+      label: 设计稿/原型
+      description: 如有设计稿或原型图，请在此添加
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 附加信息
+      description: 其他相关信息、参考链接等
