@@ -1,0 +1,127 @@
+# CODEOWNERS - 代码审查责任人配置
+# 每个文件/目录的修改都需要指定审查人员
+# 文档: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ============================================================
+# 项目根目录
+# ============================================================
+/                              @mochengjun
+
+# ============================================================
+# Flutter 应用 (apps/flutter_app)
+# ============================================================
+/apps/flutter_app/                        @mochengjun
+/apps/flutter_app/lib/                    @mochengjun
+/apps/flutter_app/lib/features/auth/      @mochengjun
+/apps/flutter_app/lib/features/chat/      @mochengjun
+/apps/flutter_app/lib/features/webrtc/    @mochengjun
+/apps/flutter_app/lib/core/               @mochengjun
+/apps/flutter_app/android/                @mochengjun
+/apps/flutter_app/ios/                    @mochengjun
+/apps/flutter_app/pubspec.yaml            @mochengjun
+
+# ============================================================
+# Web 客户端 (web-client)
+# ============================================================
+/web-client/                              @mochengjun
+/web-client/src/                          @mochengjun
+/web-client/src/core/                     @mochengjun
+/web-client/src/core/api/                 @mochengjun
+/web-client/src/presentation/             @mochengjun
+/web-client/package.json                  @mochengjun
+
+# ============================================================
+# Go 后端服务 (services)
+# ============================================================
+/services/                                @mochengjun
+
+# 认证服务
+/services/auth-service/                   @mochengjun
+/services/auth-service/internal/handler/  @mochengjun
+/services/auth-service/internal/service/  @mochengjun
+/services/auth-service/go.mod             @mochengjun
+
+# 推送服务
+/services/push-service/                   @mochengjun
+
+# 媒体代理
+/services/media-proxy/                    @mochengjun
+
+# 管理服务
+/services/admin-service/                  @mochengjun
+
+# ============================================================
+# 基础设施配置
+# ============================================================
+
+# Docker
+/deployments/docker/                     @mochengjun
+**/Dockerfile                            @mochengjun
+**/docker-compose*.yml                   @mochengjun
+
+# Kubernetes
+/deployments/k8s/                        @mochengjun
+/deployments/kubernetes/                 @mochengjun
+**/*.yaml                                @mochengjun
+
+# 监控
+/deployments/monitoring/                 @mochengjun
+
+# ============================================================
+# CI/CD 配置
+# ============================================================
+/.github/workflows/                      @mochengjun
+/.github/dependabot.yml                  @mochengjun
+/.github/CODEOWNERS                      @mochengjun
+
+# ============================================================
+# 文档
+# ============================================================
+/docs/                                   @mochengjun
+/README.md                               @mochengjun
+/CHANGELOG.md                            @mochengjun
+/CONTRIBUTING.md                         @mochengjun
+
+# ============================================================
+# 脚本和工具
+# ============================================================
+/scripts/                                @mochengjun
+/scripts/git/                            @mochengjun
+/scripts/cache-manager/                  @mochengjun
+
+# ============================================================
+# 安全相关 (必须审查)
+# ============================================================
+**/security*                             @mochengjun
+**/auth*                                 @mochengjun
+**/*secret*                              @mochengjun
+**/*.key                                 @mochengjun
+**/*.pem                                 @mochengjun
+**/secrets/                              @mochengjun
+**/credentials/                          @mochengjun
+**/.env*                                 @mochengjun
+
+# ============================================================
+# 依赖管理
+# ============================================================
+**/go.mod                                @mochengjun
+**/go.sum                                @mochengjun
+**/package.json                          @mochengjun
+**/pnpm-lock.yaml                        @mochengjun
+**/pubspec.yaml                          @mochengjun
+**/pubspec.lock                          @mochengjun
+
+# ============================================================
+# 版本发布管理
+# ============================================================
+# 版本标签管理 - 仅项目维护者可创建和推送版本标签
+/.github/release.yml                     @mochengjun
+
+# 版本发布脚本
+/scripts/release/                        @mochengjun
+/scripts/version-bump.sh                 @mochengjun
+
+# 版本配置文件
+**/version.properties                    @mochengjun
+**/.version                              @mochengjun
+**/VERSION                               @mochengjun
