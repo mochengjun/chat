@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/security/secure_storage.dart';
+import '../../../../core/services/webrtc_service.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/room.dart';
 import '../bloc/chat_room_bloc.dart';
@@ -16,6 +17,7 @@ import '../bloc/room_list_event.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
 import '../utils/time_utils.dart';
+import '../../../call/presentation/pages/call_page.dart';
 import 'chat_settings_page.dart';
 import 'media_viewer_page.dart';
 import 'room_media_page.dart';
@@ -578,16 +580,104 @@ class _ChatRoomViewState extends State<_ChatRoomView> {
     );
   }
 
+  /// 发起语音通话
   void _startVoiceCall(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('语音通话功能开发中')),
-    );
+    final state = context.read<ChatRoomBloc>().state;
+    if (state is! ChatRoomLoaded || state.room == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法发起通话：聊天室信息未加载')),
+      );
+      return;
+    }
+
+    final room = state.room!;
+    
+    // 对于直接聊天，获取对方的用户ID
+    if (room.type == RoomType.direct && room.members.isNotEmpty) {
+      // 找到对方用户（不是当前用户的成员）
+      final targetUsers = room.members
+          .where((m) => m.userId != _currentUserId)
+          .map((m) => m.userId)
+          .toList();
+      
+      if (targetUsers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法发起通话：未找到通话对象')),
+        );
+        return;
+      }
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallPage(
+            targetUserIds: targetUsers,
+            callType: CallType.voice,
+            roomId: room.id,
+          ),
+        ),
+      );
+    } else {
+      // 群组通话：使用房间ID作为目标
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallPage(
+            targetUserIds: room.members.map((m) => m.userId).toList(),
+            callType: CallType.voice,
+            roomId: room.id,
+          ),
+        ),
+      );
+    }
   }
 
+  /// 发起视频通话
   void _startVideoCall(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('视频通话功能开发中')),
-    );
+    final state = context.read<ChatRoomBloc>().state;
+    if (state is! ChatRoomLoaded || state.room == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法发起通话：聊天室信息未加载')),
+      );
+      return;
+    }
+
+    final room = state.room!;
+    
+    // 对于直接聊天，获取对方的用户ID
+    if (room.type == RoomType.direct && room.members.isNotEmpty) {
+      // 找到对方用户（不是当前用户的成员）
+      final targetUsers = room.members
+          .where((m) => m.userId != _currentUserId)
+          .map((m) => m.userId)
+          .toList();
+      
+      if (targetUsers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法发起通话：未找到通话对象')),
+        );
+        return;
+      }
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallPage(
+            targetUserIds: targetUsers,
+            callType: CallType.video,
+            roomId: room.id,
+          ),
+        ),
+      );
+    } else {
+      // 群组通话：使用房间ID作为目标
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallPage(
+            targetUserIds: room.members.map((m) => m.userId).toList(),
+            callType: CallType.video,
+            roomId: room.id,
+          ),
+        ),
+      );
+    }
   }
 
   void _showRoomSettings(BuildContext context) {
