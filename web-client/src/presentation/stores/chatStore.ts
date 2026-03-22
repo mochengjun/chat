@@ -236,12 +236,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setCurrentRoom: (room: Room | null) => {
+    const currentRoom = get().currentRoom;
+    // 避免重复设置同一个房间，防止不必要的请求
+    if (room && currentRoom?.id === room.id) {
+      return;
+    }
+
     set({ currentRoom: room });
     if (room) {
       // 记录房间初始化时间
       roomInitTimestamps.set(room.id, Date.now());
       console.log(`[ChatStore] 房间 ${room.id} 初始化开始`);
-      
+
       get().fetchMessages(room.id);
       get().fetchReadReceipts(room.id);
       get().markAsRead(room.id);
