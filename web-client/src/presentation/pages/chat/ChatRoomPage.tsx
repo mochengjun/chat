@@ -65,7 +65,9 @@ export function ChatRoomPage() {
       setCurrentRoom(null);
       hasInitializedRef.current = false;
     };
-  }, [roomId, rooms, setCurrentRoom]);
+    // 注意：只在 roomId 变化时执行，避免 rooms 更新导致重复初始化
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, setCurrentRoom]);
 
   // 获取房间消息
   const roomMessages = roomId ? (messages.get(roomId) || []) : [];
