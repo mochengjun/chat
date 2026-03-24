@@ -145,7 +145,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     return '操作失败: ${e.toString()}';
   }
 
-  /// 判断是否是连接错误
+  /// 判断是否是连接错误（需要播放错误提示音的情况）
+  /// 
+  /// 注意：401/403是业务逻辑错误，不属于网络连接错误，不应触发错误提示音
   bool _isConnectionError(Object e) {
     if (e is DioException) {
       switch (e.type) {
@@ -156,8 +158,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           return true;
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode;
-          // 401/403 也算连接/认证错误
-          return statusCode == 401 || statusCode == 403 || (statusCode != null && statusCode >= 500);
+          // 只考虑服务器错误（5xx）作为连接错误
+          // 401/403是业务逻辑错误，不应触发错误提示音
+          return statusCode != null && statusCode >= 500;
         default:
           return false;
       }

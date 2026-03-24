@@ -40,6 +40,7 @@ class WebSocketClient {
   static const _reconnectDelay = Duration(seconds: 3);
   static const _heartbeatInterval = Duration(seconds: 30);
   WebSocketConnectionState _connectionState = WebSocketConnectionState.disconnected;
+  bool _hasPlayedFinalErrorSound = false;
 
   WebSocketClient({
     required this.baseUrl,
@@ -55,10 +56,14 @@ class WebSocketClient {
     _connectionState = state;
     _connectionStateController.add(state);
     
-    // 在连接失败时播放错误提示音
-    if (state == WebSocketConnectionState.failed) {
+    // 只在最终失败状态时播放错误提示音（达到最大重连次数后）
+    // 且只播放一次，避免重复提示音
+    if (state == WebSocketConnectionState.failed && 
+        _reconnectAttempts >= _maxReconnectAttempts && 
+        !_hasPlayedFinalErrorSound) {
+      _hasPlayedFinalErrorSound = true;
       notificationSoundService.playErrorSound();
-      print('WebSocket 连接失败: $errorMessage');
+      print('WebSocket 连接最终失败: $errorMessage');
     }
   }
 
@@ -93,6 +98,7 @@ class WebSocketClient {
       _channel = WebSocketChannel.connect(uri);
       _isConnected = true;
       _reconnectAttempts = 0;
+      _hasPlayedFinalErrorSound = false; // 连接成功时重置错误提示音标志
       _updateConnectionState(WebSocketConnectionState.connected);
       
       _channel!.stream.listen(
@@ -176,6 +182,8 @@ class WebSocketClient {
     _stopHeartbeat();
     _reconnectTimer?.cancel();
     _isConnected = false;
+    _reconnectAttempts = 0; // 重置重连次数
+    _hasPlayedFinalErrorSound = false; // 重置错误提示音标志
     _updateConnectionState(WebSocketConnectionState.disconnected);
     await _channel?.sink.close();
     _channel = null;

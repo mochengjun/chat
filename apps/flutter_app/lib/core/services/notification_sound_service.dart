@@ -18,7 +18,9 @@ class NotificationSoundService {
   bool _isMuted = false;
   bool _isInitialized = false;
   DateTime? _lastPlayTime;
+  DateTime? _lastErrorPlayTime;
   static const Duration _throttleDuration = Duration(milliseconds: 800);
+  static const Duration _errorThrottleDuration = Duration(seconds: 3);
 
   /// 初始化服务
   Future<void> initialize() async {
@@ -84,7 +86,20 @@ class NotificationSoundService {
   /// 播放错误提示音（连接失败等）
   /// 
   /// 使用较低的音调和三连音来强调错误
+  /// 包含节流控制，避免短时间内重复播放
   Future<void> playErrorSound() async {
+    if (_isMuted) return;
+
+    // 节流控制：避免短时间内重复播放错误提示音
+    if (_lastErrorPlayTime != null) {
+      final elapsed = DateTime.now().difference(_lastErrorPlayTime!);
+      if (elapsed < _errorThrottleDuration) {
+        return;
+      }
+    }
+
+    _lastErrorPlayTime = DateTime.now();
+
     try {
       // 使用系统触觉反馈 - 连续两次强调错误
       await HapticFeedback.heavyImpact();
