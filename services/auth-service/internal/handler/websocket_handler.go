@@ -21,6 +21,13 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
+
+		// 允许空origin（某些客户端如桌面应用、Postman等）
+		if origin == "" || origin == "null" {
+			log.Printf("WebSocket connection allowed from empty/null origin")
+			return true
+		}
+
 		// 从环境变量读取允许的域名列表
 		allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
 		if allowedOriginsStr == "" {
