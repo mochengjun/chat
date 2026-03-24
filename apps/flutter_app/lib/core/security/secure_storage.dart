@@ -23,6 +23,17 @@ class SecureStorageService {
   static const String keyUsername = 'username';
   static const String keyDeviceId = 'device_id';
 
+  /// 初始化服务，预加载 token 到内存缓存
+  /// 必须在应用启动时调用，确保同步方法能正确返回 token
+  Future<void> initialize() async {
+    try {
+      _cachedAccessToken = await _storage.read(key: keyAccessToken);
+    } catch (e) {
+      // 初始化失败时，缓存保持为空
+      _cachedAccessToken = null;
+    }
+  }
+
   // 写入数据
   Future<void> write(String key, String value) async {
     await _storage.write(key: key, value: value);

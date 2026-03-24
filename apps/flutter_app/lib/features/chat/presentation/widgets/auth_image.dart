@@ -9,9 +9,11 @@ import '../../../../core/network/server_config_service.dart';
 Future<Map<String, String>> getAuthHeaders() async {
   final storage = getIt<SecureStorageService>();
   final token = await storage.getAccessToken();
-  return {
-    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-  };
+  final headers = <String, String>{};
+  if (token != null && token.isNotEmpty) {
+    headers['Authorization'] = 'Bearer $token';
+  }
+  return headers;
 }
 
 /// 获取完整的图片URL
@@ -59,6 +61,7 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
   Map<String, String> _headers = {};
   String _fullUrl = '';
   String? _thumbnailUrl;
+  bool _isInitialized = false; // 标记是否已完成初始化
 
   @override
   void initState() {
@@ -75,14 +78,28 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
   }
 
   Future<void> _loadHeaders() async {
+    _isInitialized = false;
     _headers = await getAuthHeaders();
     _fullUrl = await getFullImageUrl(widget.imageUrl);
     _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
+    _isInitialized = true;
     if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    // 在初始化完成之前显示加载状态
+    if (!_isInitialized) {
+      return widget.placeholder ?? Container(
+        width: widget.width,
+        height: widget.height,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Center(
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
     if (_fullUrl.isEmpty) {
       return widget.errorWidget ?? _buildDefaultErrorWidget();
     }
