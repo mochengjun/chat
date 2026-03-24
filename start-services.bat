@@ -2,7 +2,8 @@
 REM ============================================================
 REM Secure Enterprise Chat - 服务启动脚本
 REM 启动后端 API 服务和前端 Web 客户端
-REM 目标地址: 172.25.118.254:8081 (后端) / :3000 (前端)
+REM 目标地址: 172.25.194.201:8081 (后端) / :3000 (前端)
+REM 注意: ZeroTier网络IP可能会变化，请确保配置正确
 REM ============================================================
 
 setlocal EnableDelayedExpansion
@@ -202,7 +203,7 @@ REM ============================================================
 
 echo %GREEN%[启动] 后端服务 (Auth Service)...%RESET%
 echo        目录: %AUTH_SERVICE_DIR%
-echo        监听: http://172.25.118.254:8081
+echo        监听: http://172.25.194.201:8081 (ZeroTier网络)
 echo.
 
 cd /d "%AUTH_SERVICE_DIR%"
@@ -242,7 +243,7 @@ REM ============================================================
 echo %GREEN%[启动] 前端服务 (Web Client)...%RESET%
 echo        目录: %WEB_CLIENT_DIR%
 echo        监听: http://localhost:3000
-echo        代理: http://172.25.118.254:8081
+echo        代理: http://172.25.194.201:8081
 echo.
 
 cd /d "%WEB_CLIENT_DIR%"
@@ -278,16 +279,16 @@ echo ============================================================
 echo.
 echo   服务访问地址:
 echo   ------------------------------------------------------------
-echo   后端 API:     http://172.25.118.254:8081/api/v1
-echo   后端健康检查: http://172.25.118.254:8081/health
-echo   WebSocket:    ws://172.25.118.254:8081/api/v1/ws
+echo   后端 API:     http://172.25.194.201:8081/api/v1
+echo   后端健康检查: http://172.25.194.201:8081/health
+echo   WebSocket:    ws://172.25.194.201:8081/api/v1/ws
 echo   前端 Web:     http://localhost:3000
 echo   ------------------------------------------------------------
 echo.
 echo   测试命令:
 echo   ------------------------------------------------------------
-echo   健康检查:  curl http://172.25.118.254:8081/health
-echo   公共群组:  curl http://172.25.118.254:8081/api/v1/chat/rooms/public
+echo   健康检查:  curl http://172.25.194.201:8081/health
+echo   公共群组:  curl http://172.25.194.201:8081/api/v1/chat/rooms/public
 echo   ------------------------------------------------------------
 echo.
 echo   服务窗口:
