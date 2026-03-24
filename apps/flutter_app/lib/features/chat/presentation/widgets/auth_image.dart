@@ -16,6 +16,13 @@ Future<Map<String, String>> getAuthHeaders() async {
   return headers;
 }
 
+/// 获取当前用户ID用于缓存key
+Future<String> _getCacheKeySuffix() async {
+  final storage = getIt<SecureStorageService>();
+  final userInfo = await storage.getUserInfo();
+  return userInfo['userId'] ?? 'anonymous';
+}
+
 /// 获取完整的图片URL
 Future<String> getFullImageUrl(String? url) async {
   if (url == null || url.isEmpty) return '';
@@ -61,6 +68,7 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
   Map<String, String> _headers = {};
   String _fullUrl = '';
   String? _thumbnailUrl;
+  String _cacheKeySuffix = '';
   bool _isInitialized = false; // 标记是否已完成初始化
 
   @override
@@ -82,6 +90,7 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
     _headers = await getAuthHeaders();
     _fullUrl = await getFullImageUrl(widget.imageUrl);
     _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
+    _cacheKeySuffix = await _getCacheKeySuffix();
     _isInitialized = true;
     if (mounted) setState(() {});
   }
@@ -105,13 +114,19 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
     }
 
     final displayUrl = _thumbnailUrl ?? _fullUrl;
+    // 使用用户ID作为缓存key的一部分，确保不同用户的缓存不会混淆
+    final cacheKey = '$_cacheKeySuffix:$displayUrl';
 
     return CachedNetworkImage(
       imageUrl: displayUrl,
+      cacheKey: cacheKey, // 自定义缓存key，包含用户ID
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
       httpHeaders: _headers,
+      // 禁用内存缓存，避免认证问题
+      memCacheWidth: null,
+      memCacheHeight: null,
       placeholder: widget.placeholder != null
           ? (context, url) => widget.placeholder!
           : (context, url) => Container(
@@ -168,6 +183,7 @@ class AuthPhotoView extends StatefulWidget {
 class _AuthPhotoViewState extends State<AuthPhotoView> {
   Map<String, String> _headers = {};
   String _fullUrl = '';
+  String _cacheKeySuffix = '';
   bool _isLoading = true;
   bool _hasError = false;
 
@@ -193,6 +209,7 @@ class _AuthPhotoViewState extends State<AuthPhotoView> {
 
     _headers = await getAuthHeaders();
     _fullUrl = await getFullImageUrl(widget.imageUrl);
+    _cacheKeySuffix = await _getCacheKeySuffix();
 
     if (mounted) {
       setState(() {
@@ -220,10 +237,14 @@ class _AuthPhotoViewState extends State<AuthPhotoView> {
       );
     }
 
+    // 使用用户ID作为缓存key的一部分，确保不同用户的缓存不会混淆
+    final cacheKey = '$_cacheKeySuffix:$_fullUrl';
+
     return PhotoView(
       imageProvider: CachedNetworkImageProvider(
         _fullUrl,
         headers: _headers,
+        cacheKey: cacheKey, // 自定义缓存key，包含用户ID
       ),
       backgroundDecoration: BoxDecoration(
         color: widget.backgroundColor ?? Colors.black,
