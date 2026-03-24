@@ -58,7 +58,7 @@ if ($routeTable) {
 
 # 6. 测试网络连通性
 Write-Host "`n6. 测试网络连通性：" -ForegroundColor Yellow
-$testIP = "172.25.118.254"  # 从截图中获取的IP
+$testIP = "172.25.194.201"  # 从截图中获取的IP
 try {
     $pingResult = Test-Connection -ComputerName $testIP -Count 2 -Quiet
     if ($pingResult) {
@@ -76,8 +76,8 @@ Write-Host "`n7. 配置Docker网络：" -ForegroundColor Yellow
 $dockerConfig = @{
     "proxies" = @{
         "default" = @{
-            "httpProxy" = "http://172.25.118.254:9993"
-            "httpsProxy" = "http://172.25.118.254:9993"
+            "httpProxy" = "http://172.25.194.201:9993"
+            "httpsProxy" = "http://172.25.194.201:9993"
             "noProxy" = "localhost,127.0.0.1,hubproxy.docker.internal"
         }
     }

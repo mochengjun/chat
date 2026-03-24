@@ -11,7 +11,7 @@
     <!-- 特定域名配置（保留以便将来需要） -->
     <domain-config cleartextTrafficPermitted="true">
         <!-- ZeroTier 网络 -->
-        <domain includeSubdomains="true">172.25.118.254</domain>
+        <domain includeSubdomains="true">172.25.194.201</domain>
         <!-- ZeroTier 网段 -->
         <domain includeSubdomains="true">172.25.0.0</domain>
         <!-- Android 模拟器宿主机 -->

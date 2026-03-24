@@ -83,44 +83,41 @@ class NodeJSCacheManager:
         package_data = self.parse_package_json(package_file)
         if not package_data:
             return 0, 0, []
-        
+
         dependencies = package_data.get('dependencies', {})
         dev_dependencies = package_data.get('devDependencies', {})
         all_deps = {**dependencies, **dev_dependencies}
-        
+
         total = len(all_deps)
         cached = 0
         missing = []
-        
-        local_cache = self.npm_cache
+
+        # 获取项目目录下的 node_modules 路径
+        package_dir = package_file.parent
+        project_node_modules = package_dir / 'node_modules'
+
+        # 获取系统 npm 缓存路径
         system_cache = self.get_system_npm_cache()
-        
+
         for pkg_name, pkg_version in all_deps.items():
-            # 检查本地缓存
-            local_cached = self._check_package_in_cache(pkg_name, pkg_version, local_cache)
-            # 检查系统缓存
-            system_cached = self._check_package_in_cache(pkg_name, pkg_version, system_cache)
-            
-            if local_cached or system_cached:
+            # 首先检查项目本地 node_modules 中是否已安装
+            local_installed = self._check_package_in_project(pkg_name, pkg_version, project_node_modules)
+            # 然后检查系统 npm 缓存
+            system_cached = self._check_package_in_npm_cache(pkg_name, pkg_version, system_cache)
+
+            if local_installed or system_cached:
                 cached += 1
             else:
                 missing.append(f"{pkg_name}@{pkg_version}")
-        
+
         return cached, total, missing
     
-    def _check_package_in_cache(self, pkg_name: str, pkg_version: str, cache_path: Path) -> bool:
-        """检查包是否存在于缓存中"""
-        if not cache_path.exists():
+    def _check_package_in_project(self, pkg_name: str, pkg_version: str, node_modules_path: Path) -> bool:
+        """检查包是否已安装在项目的 node_modules 中"""
+        if not node_modules_path.exists():
             return False
-        
-        # NPM 缓存结构: cache_path/_cacache/
-        # 使用 npm ls 命令检查会更准确
-        
-        # 简化检查: 检查缓存目录中是否有相关文件
-        # NPM 缓存使用内容寻址,不容易直接检查
-        
-        # 检查 node_modules
-        package_dir = cache_path.parent / 'node_modules' / pkg_name
+
+        package_dir = node_modules_path / pkg_name
         if package_dir.exists():
             # 检查版本
             pkg_json = package_dir / 'package.json'
@@ -128,13 +125,60 @@ class NodeJSCacheManager:
                 try:
                     with open(pkg_json, 'r', encoding='utf-8') as f:
                         pkg_data = json.load(f)
-                        # 版本匹配检查
-                        cached_version = pkg_data.get('version', '')
-                        if self._version_matches(pkg_version, cached_version):
+                        installed_version = pkg_data.get('version', '')
+                        if self._version_matches(pkg_version, installed_version):
                             return True
                 except Exception:
                     pass
-        
+
+        return False
+
+    def _check_package_in_npm_cache(self, pkg_name: str, pkg_version: str, cache_path: Path) -> bool:
+        """检查包是否存在于 NPM 缓存中"""
+        if not cache_path.exists():
+            return False
+
+        # NPM 缓存使用 _cacache 目录结构，通过内容寻址存储
+        # 检查缓存目录中是否存在该包的缓存条目
+        cacache_dir = cache_path / '_cacache'
+        if cacache_dir.exists():
+            # 检查 index-v5 目录中是否有该包的索引
+            index_dir = cacache_dir / 'index-v5'
+            if index_dir.exists():
+                # 搜索包含包名的缓存条目
+                for index_file in index_dir.rglob('*'):
+                    if index_file.is_file():
+                        try:
+                            with open(index_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                # 检查文件内容是否包含包名和版本
+                                if pkg_name in content:
+                                    # 进一步检查版本是否匹配
+                                    if self._version_in_cache_content(content, pkg_name, pkg_version):
+                                        return True
+                        except Exception:
+                            continue
+
+        return False
+
+    def _version_in_cache_content(self, content: str, pkg_name: str, pkg_version: str) -> bool:
+        """检查缓存内容中是否包含指定版本的包"""
+        # 简化检查：如果内容中包含包名，认为可能已缓存
+        # 实际 NPM 缓存结构复杂，这里做近似检查
+        if pkg_name not in content:
+            return False
+
+        # 移除版本前缀 (^, ~, >=, <=, >, <)
+        clean_version = pkg_version.lstrip('^~>=<')
+
+        # 检查内容中是否包含版本号
+        if clean_version in content:
+            return True
+
+        # 对于 latest 或 * 版本，只要包名存在就认为匹配
+        if pkg_version in ('latest', '*'):
+            return True
+
         return False
     
     def _version_matches(self, version_range: str, actual_version: str) -> bool:
