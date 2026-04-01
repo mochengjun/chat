@@ -46,7 +46,10 @@ Future<void> configureDependencies() async {
   final apiBaseUrl = ServerConfigService.buildApiBaseUrl(config.host, config.port);
   
   // Core
-  getIt.registerLazySingleton<SecureStorageService>(() => SecureStorageService());
+  final secureStorage = SecureStorageService();
+  // 预加载 token 到内存缓存，确保同步方法能正确返回 token
+  await secureStorage.initialize();
+  getIt.registerLazySingleton<SecureStorageService>(() => secureStorage);
   getIt.registerLazySingleton<ServerConfigService>(() => ServerConfigService());
   getIt.registerLazySingleton<Dio>(() => createDio(apiBaseUrl));
   getIt.registerLazySingleton<DioClient>(() => DioClient(getIt<Dio>()));
