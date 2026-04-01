@@ -24,8 +24,9 @@ class NetworkConfig {
 
   // 默认服务器配置
   // 使用实际检测到的IP地址，避免硬编码过时IP
-  static const String defaultServerHost = '172.25.194.201';
-  static const int defaultServerPort = 8081;
+  // 远程服务器地址: 8.130.55.126 (公网访问，通过nginx反向代理)
+  static const String defaultServerHost = '8.130.55.126';
+  static const int defaultServerPort = 80; // 通过nginx反向代理访问
   
   // 网络检测相关
   static const Duration connectionTimeout = Duration(seconds: 30);
