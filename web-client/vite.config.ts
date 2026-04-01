@@ -22,7 +22,7 @@ export default defineConfig({
       '/api': {
         // 使用实际服务器IP地址
         // 注意：如果服务器IP变化，需要更新此配置
-        target: 'http://172.25.194.201:8081',
+        target: 'http://8.130.55.126:8081',
         changeOrigin: true,
         ws: true, // 同时代理 WebSocket（/api/v1/ws）
       },

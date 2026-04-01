@@ -10,6 +10,8 @@
     
     <!-- 特定域名配置（保留以便将来需要） -->
     <domain-config cleartextTrafficPermitted="true">
+        <!-- 远程服务器 (公网访问) -->
+        <domain includeSubdomains="true">8.130.55.126</domain>
         <!-- ZeroTier 网络 -->
         <domain includeSubdomains="true">172.25.194.201</domain>
         <!-- ZeroTier 网段 -->
