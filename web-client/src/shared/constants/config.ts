@@ -2,13 +2,20 @@
 // 使用相对路径 /api/v1，通过 vite proxy 代理到后端，确保局域网/外网都能访问
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
+// 服务器公网IP配置
+export const SERVER_CONFIG = {
+  HOST: import.meta.env.VITE_SERVER_HOST || window.location.hostname,
+  PORT: import.meta.env.VITE_SERVER_PORT || window.location.port || '80',
+};
+
 // WebSocket URL：根据当前页面 host 动态计算，确保外网也能连接
 function getWsUrl(): string {
   const envWsUrl = import.meta.env.VITE_WS_URL;
   if (envWsUrl) return envWsUrl;
-  
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/api/v1/ws`;
+  const host = window.location.host;
+  return `${protocol}//${host}/api/v1/ws`;
 }
 
 export const API_CONFIG = {

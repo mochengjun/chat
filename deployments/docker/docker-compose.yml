@@ -125,7 +125,7 @@ services:
       - SERVER_MODE=${SERVER_MODE:-release}
       - SERVER_READ_TIMEOUT=${SERVER_READ_TIMEOUT:-30s}
       - SERVER_WRITE_TIMEOUT=${SERVER_WRITE_TIMEOUT:-30s}
-      
+
       # Database
       - DATABASE_TYPE=postgres
       - DATABASE_HOST=postgres
@@ -136,28 +136,28 @@ services:
       - DATABASE_SSL_MODE=${DATABASE_SSL_MODE:-disable}
       - DATABASE_MAX_CONNECTIONS=${DATABASE_MAX_CONNECTIONS:-100}
       - DATABASE_MAX_IDLE_CONNECTIONS=${DATABASE_MAX_IDLE_CONNECTIONS:-10}
-      
+
       # Redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-change_me_in_production}
       - REDIS_DB=${REDIS_DB:-0}
-      
+
       # JWT
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production_must_be_at_least_32_chars}
       - JWT_ACCESS_EXPIRY=${JWT_ACCESS_EXPIRY:-1h}
       - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY:-168h}
-      
+
       # Security
       - BCRYPT_COST=${BCRYPT_COST:-12}
       - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
       - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-1m}
-      
+
       # Media Upload
       - UPLOAD_MAX_SIZE=${UPLOAD_MAX_SIZE:-104857600}
       - UPLOAD_ALLOWED_TYPES=${UPLOAD_ALLOWED_TYPES:-image/jpeg,image/png,image/gif,video/mp4,audio/mpeg,application/pdf}
       - UPLOAD_PATH=/app/uploads
-      
+
       # Push Notifications
       - FCM_ENABLED=${FCM_ENABLED:-false}
       - FCM_CREDENTIALS_PATH=/app/keys/firebase.json
@@ -166,24 +166,29 @@ services:
       - APNS_KEY_ID=${APNS_KEY_ID:-}
       - APNS_TEAM_ID=${APNS_TEAM_ID:-}
       - APNS_BUNDLE_ID=${APNS_BUNDLE_ID:-}
-      
+
       # WebRTC / TURN
       - TURN_SERVER=${TURN_SERVER:-turn:turn.example.com:3478}
       - TURN_USERNAME=${TURN_USERNAME:-}
       - TURN_PASSWORD=${TURN_PASSWORD:-}
       - STUN_SERVER=${STUN_SERVER:-stun:stun.l.google.com:19302}
-      
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_FORMAT=${LOG_FORMAT:-json}
+
+      # CORS - 允许公网IP访问
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://8.130.55.126,http://8.130.55.126:80,http://localhost}
     volumes:
       # 数据持久化：使用命名卷
       - auth_uploads:/app/uploads
       - auth_data:/app/data
       - auth_logs:/app/logs
       - ./keys:/app/keys:ro
-    # ports:  # 生产环境通过 nginx 访问，不直接暴露 API 端口
-    #   - "${API_PORT:-8081}:8081"
+    ports:
+      # 暴露API端口到公网 - 可选方案1：直接暴露API端口
+      # 生产环境建议通过 nginx 访问，此端口仅用于调试
+      - "${API_PORT:-8081}:8081"
     networks:
       - sec-chat-network
     healthcheck:

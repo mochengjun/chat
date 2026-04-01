@@ -1,0 +1,83 @@
+﻿{
+    "Summary":  {
+                    "Failed":  2,
+                    "PassRate":  "80%",
+                    "Skipped":  0,
+                    "Total":  10,
+                    "Passed":  8
+                },
+    "Server":  "8.130.55.126",
+    "TestTime":  "2026-04-01 08:00:36",
+    "Results":  [
+                    {
+                        "Category":  "Port",
+                        "TestName":  "HTTP Port 80",
+                        "Status":  "PASS",
+                        "Message":  "端口可访问",
+                        "Timestamp":  "2026-04-01 08:00:34"
+                    },
+                    {
+                        "Category":  "Port",
+                        "TestName":  "API Port 8081",
+                        "Status":  "PASS",
+                        "Message":  "端口可访问",
+                        "Timestamp":  "2026-04-01 08:00:34"
+                    },
+                    {
+                        "Category":  "Health",
+                        "TestName":  "HTTP Health (Port 80)",
+                        "Status":  "FAIL",
+                        "Message":  "Method invocation failed because [System.Byte] does not contain a method named \u0027Substring\u0027.",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "Health",
+                        "TestName":  "API Health (Port 8081)",
+                        "Status":  "FAIL",
+                        "Message":  "Method invocation failed because [System.Byte] does not contain a method named \u0027Substring\u0027.",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "API",
+                        "TestName":  "API Root",
+                        "Status":  "PASS",
+                        "Message":  "状态码: 200",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "API",
+                        "TestName":  "Auth Login Endpoint",
+                        "Status":  "PASS",
+                        "Message":  "登录成功",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "API",
+                        "TestName":  "Auth Register Endpoint",
+                        "Status":  "PASS",
+                        "Message":  "注册端点可用",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "WebSocket",
+                        "TestName":  "WebSocket Upgrade",
+                        "Status":  "PASS",
+                        "Message":  "端点存在 (状态码: 200)",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "CORS",
+                        "TestName":  "CORS Headers",
+                        "Status":  "PASS",
+                        "Message":  "无CORS头 (可能允许所有来源)",
+                        "Timestamp":  "2026-04-01 08:00:35"
+                    },
+                    {
+                        "Category":  "Frontend",
+                        "TestName":  "Frontend Page",
+                        "Status":  "PASS",
+                        "Message":  "页面已加载, 大小: 47 bytes",
+                        "Timestamp":  "2026-04-01 08:00:36"
+                    }
+                ]
+}

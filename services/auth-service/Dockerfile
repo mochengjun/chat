@@ -6,6 +6,10 @@
 # Stage 1: Builder
 FROM golang:1.23-alpine AS builder
 
+# 设置Go代理（国内镜像）
+ENV GOPROXY=https://goproxy.cn,https://goproxy.io,direct
+ENV GOSUMDB=sum.golang.org
+
 # 安装构建依赖
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -43,9 +47,6 @@ WORKDIR /app
 
 # 从构建阶段复制二进制文件
 COPY --from=builder /build/auth-service .
-
-# 复制静态资源（管理后台）
-COPY --from=builder /build/internal/handler/admin_dashboard /app/admin_dashboard
 
 # 创建必要目录
 RUN mkdir -p /app/uploads/media \

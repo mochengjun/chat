@@ -98,6 +98,8 @@ dev_dependencies:
   json_serializable: ^6.7.1
   bloc_test: ^9.1.5
   mocktail: ^1.0.1
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true
