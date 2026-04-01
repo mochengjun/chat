@@ -19,7 +19,9 @@ import {
 import { useChatStore } from '@presentation/stores/chatStore';
 import { useAuthStore } from '@presentation/stores/authStore';
 import AuthImage from '@presentation/components/chat/AuthImage';
+import { useMediaUpload } from '@presentation/hooks/useMediaUpload';
 import type { Message } from '@domain/entities/Message';
+import type { MediaUploadResponse } from '@shared/types/api.types';
 import dayjs from 'dayjs';
 
 const { Header, Content, Footer } = Layout;
@@ -49,6 +51,60 @@ export function ChatRoomPage() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const hasInitializedRef = useRef(false); // 房间初始化标记
+
+  // 媒体上传hook
+  const { uploadFile: uploadMediaFile, uploading: isUploadingMedia } = useMediaUpload({
+    maxSize: 50, // 50MB限制
+    acceptTypes: ['image/*', 'video/*', 'audio/*'],
+    onSuccess: (media: MediaUploadResponse) => {
+      // 上传成功后发送媒体消息
+      if (roomId) {
+        handleSendMediaMessage(media);
+      }
+    },
+    onError: (error: Error) => {
+      message.error(`上传失败: ${error.message}`);
+    },
+  });
+
+  // 发送媒体消息
+  const handleSendMediaMessage = async (media: MediaUploadResponse) => {
+    if (!roomId) return;
+
+    setIsSending(true);
+    try {
+      // 根据mime_type判断消息类型
+      let messageType: 'image' | 'video' | 'file' | 'audio' = 'file';
+      if (media.mime_type.startsWith('image/')) {
+        messageType = 'image';
+      } else if (media.mime_type.startsWith('video/')) {
+        messageType = 'video';
+      } else if (media.mime_type.startsWith('audio/')) {
+        messageType = 'audio';
+      }
+
+      await sendMessage(roomId, {
+        content: media.filename,
+        type: messageType,
+        media_id: media.id,
+      });
+
+      // 发送消息后延迟滚动到底部
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+    } catch {
+      message.error('发送媒体消息失败');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // 处理图片上传
+  const handleImageUpload = async (file: File) => {
+    await uploadMediaFile(file as unknown as import('antd/es/upload/interface').RcFile);
+    return false; // 阻止默认上传行为
+  };
 
   // 获取当前房间和消息
   useEffect(() => {
@@ -438,14 +494,24 @@ export function ChatRoomPage() {
         borderTop: '1px solid #f0f0f0',
       }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <Upload showUploadList={false} disabled>
-            <Button type="text" icon={<PictureOutlined />} />
+          <Upload
+            showUploadList={false}
+            accept="image/*"
+            beforeUpload={handleImageUpload}
+            disabled={isUploadingMedia}
+          >
+            <Button
+              type="text"
+              icon={<PictureOutlined />}
+              loading={isUploadingMedia}
+              title="发送图片"
+            />
           </Upload>
           <Upload showUploadList={false} disabled>
-            <Button type="text" icon={<PaperClipOutlined />} />
+            <Button type="text" icon={<PaperClipOutlined />} title="发送文件（暂不可用）" />
           </Upload>
-          <Button type="text" icon={<SmileOutlined />} disabled />
-          
+          <Button type="text" icon={<SmileOutlined />} disabled title="表情（暂不可用）" />
+
           <Input.TextArea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
@@ -453,14 +519,15 @@ export function ChatRoomPage() {
             placeholder="输入消息..."
             autoSize={{ minRows: 1, maxRows: 4 }}
             style={{ flex: 1, resize: 'none' }}
+            disabled={isUploadingMedia}
           />
-          
+
           <Button
             type="primary"
             icon={<SendOutlined />}
             onClick={handleSend}
             loading={isSending}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || isUploadingMedia}
           >
             发送
           </Button>
