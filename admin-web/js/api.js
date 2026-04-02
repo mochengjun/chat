@@ -1,5 +1,6 @@
 // API Configuration
-const API_BASE_URL = 'http://localhost:8081/api/v1';
+// 使用相对路径，通过 nginx 代理访问后端 API
+const API_BASE_URL = '/api/v1';
 
 // Token Management
 const TokenManager = {
@@ -37,29 +38,61 @@ const api = {
             'Content-Type': 'application/json',
             ...options.headers
         };
-        
+
         const token = TokenManager.getToken();
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        
+
         try {
             const response = await fetch(url, {
                 ...options,
                 headers
             });
-            
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Request failed');
+
+            // 尝试解析 JSON 响应
+            let data;
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                throw new Error(`服务器返回非JSON响应: ${text.substring(0, 100)}`);
             }
-            
+
+            if (!response.ok) {
+                // 根据状态码提供更具体的错误信息
+                const errorMessage = data.error || this.getDefaultErrorMessage(response.status);
+                throw new Error(errorMessage);
+            }
+
             return data;
         } catch (error) {
             console.error('API Error:', error);
+
+            // 区分网络错误和其他错误
+            if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+                throw new Error('网络连接失败，请检查服务器是否正常运行');
+            }
+
             throw error;
         }
+    },
+
+    getDefaultErrorMessage(status) {
+        const messages = {
+            400: '请求参数错误',
+            401: '未授权，请重新登录',
+            403: '没有权限执行此操作',
+            404: '请求的资源不存在',
+            409: '资源冲突',
+            429: '请求过于频繁，请稍后再试',
+            500: '服务器内部错误',
+            502: '网关错误',
+            503: '服务暂时不可用',
+            504: '网关超时'
+        };
+        return messages[status] || `请求失败 (${status})`;
     },
     
     get(endpoint) {
