@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:photo_view/photo_view.dart';
@@ -7,20 +8,30 @@ import '../../../../core/network/server_config_service.dart';
 
 /// 获取认证headers
 Future<Map<String, String>> getAuthHeaders() async {
-  final storage = getIt<SecureStorageService>();
-  final token = await storage.getAccessToken();
-  final headers = <String, String>{};
-  if (token != null && token.isNotEmpty) {
-    headers['Authorization'] = 'Bearer $token';
+  try {
+    final storage = getIt<SecureStorageService>();
+    final token = await storage.getAccessToken();
+    final headers = <String, String>{};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  } catch (e) {
+    debugPrint('[AuthImage] getAuthHeaders error: $e');
+    return <String, String>{};
   }
-  return headers;
 }
 
 /// 获取当前用户ID用于缓存key
 Future<String> _getCacheKeySuffix() async {
-  final storage = getIt<SecureStorageService>();
-  final userInfo = await storage.getUserInfo();
-  return userInfo['userId'] ?? 'anonymous';
+  try {
+    final storage = getIt<SecureStorageService>();
+    final userInfo = await storage.getUserInfo();
+    return userInfo['userId'] ?? 'anonymous';
+  } catch (e) {
+    debugPrint('[AuthImage] _getCacheKeySuffix error: $e');
+    return 'anonymous';
+  }
 }
 
 /// 获取完整的图片URL
@@ -29,14 +40,19 @@ Future<String> getFullImageUrl(String? url) async {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  final config = await ServerConfigService.loadConfig();
-  // 检查 URL 是否已经包含 /api/v1 前缀，避免重复添加
-  if (url.startsWith('/api/v1/')) {
-    final hostUrl = 'http://${config.host}:${config.port}';
-    return '$hostUrl$url';
+  try {
+    final config = await ServerConfigService.loadConfig();
+    // 检查 URL 是否已经包含 /api/v1 前缀，避免重复添加
+    if (url.startsWith('/api/v1/')) {
+      final hostUrl = 'http://${config.host}:${config.port}';
+      return '$hostUrl$url';
+    }
+    final baseUrl = ServerConfigService.buildApiBaseUrl(config.host, config.port);
+    return '$baseUrl$url';
+  } catch (e) {
+    debugPrint('[AuthImage] getFullImageUrl error: $e, url=$url');
+    return '';
   }
-  final baseUrl = ServerConfigService.buildApiBaseUrl(config.host, config.port);
-  return '$baseUrl$url';
 }
 
 /// 支持认证的网络图片组件
@@ -87,13 +103,15 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
 
   Future<void> _loadHeaders() async {
     _isInitialized = false;
-    _headers = await getAuthHeaders();
-    if (!mounted) return;
-    _fullUrl = await getFullImageUrl(widget.imageUrl);
-    if (!mounted) return;
-    _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
-    if (!mounted) return;
-    _cacheKeySuffix = await _getCacheKeySuffix();
+    try {
+      _headers = await getAuthHeaders();
+      _fullUrl = await getFullImageUrl(widget.imageUrl);
+      _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
+      _cacheKeySuffix = await _getCacheKeySuffix();
+    } catch (e) {
+      debugPrint('[AuthNetworkImage] _loadHeaders error: $e');
+      _fullUrl = '';
+    }
     _isInitialized = true;
     if (mounted) setState(() {});
   }
@@ -142,7 +160,10 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
             ),
       errorWidget: widget.errorWidget != null
           ? (context, url, error) => widget.errorWidget!
-          : (context, url, error) => _buildDefaultErrorWidget(),
+          : (context, url, error) {
+              debugPrint('[AuthNetworkImage] CachedNetworkImage error: $error, url: $url');
+              return _buildDefaultErrorWidget();
+            },
     );
   }
 
@@ -210,11 +231,15 @@ class _AuthPhotoViewState extends State<AuthPhotoView> {
       _hasError = false;
     });
 
-    _headers = await getAuthHeaders();
-    if (!mounted) return;
-    _fullUrl = await getFullImageUrl(widget.imageUrl);
-    if (!mounted) return;
-    _cacheKeySuffix = await _getCacheKeySuffix();
+    try {
+      _headers = await getAuthHeaders();
+      _fullUrl = await getFullImageUrl(widget.imageUrl);
+      _cacheKeySuffix = await _getCacheKeySuffix();
+    } catch (e) {
+      debugPrint('[AuthPhotoView] _loadHeaders error: $e');
+      _fullUrl = '';
+      _hasError = true;
+    }
 
     if (mounted) {
       setState(() {
@@ -270,6 +295,7 @@ class _AuthPhotoViewState extends State<AuthPhotoView> {
         );
       },
       errorBuilder: (context, error, stackTrace) {
+        debugPrint('[AuthPhotoView] PhotoView error: $error');
         return widget.errorBuilder ?? Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

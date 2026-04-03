@@ -38,30 +38,30 @@ class NetworkConfig {
   static const Duration buildNetworkTimeout = Duration(seconds: 60);
 
   /// 检测是否在Android模拟器中运行
+  /// 通过检查 localhost 端口连通性来推断（模拟器中 10.0.2.2 映射宿主机）
+  /// 注意：Platform.environment 在 Android 上无法获取系统属性，
+  /// 因此使用 Platform.operatingSystemVersion 来检测模拟器特征
   static bool get _isAndroidEmulator {
     if (!Platform.isAndroid) return false;
-    // 通过检查特定属性来检测模拟器
     try {
-      final product = Platform.environment['ANDROID_PRODUCT'] ?? '';
-      final model = Platform.environment['ANDROID_MODEL'] ?? '';
-      final device = Platform.environment['ANDROID_DEVICE'] ?? '';
-      return product.contains('sdk') ||
-          product.contains('emulator') ||
-          model.contains('Emulator') ||
-          model.contains('Android SDK') ||
-          device.contains('emulator');
+      // Android 模拟器的 operatingSystemVersion 通常包含 sdk/emulator 等关键字
+      final osVersion = Platform.operatingSystemVersion.toLowerCase();
+      return osVersion.contains('sdk') ||
+          osVersion.contains('emulator') ||
+          osVersion.contains('generic');
     } catch (_) {
       return false;
     }
   }
 
   /// 检测是否在iOS模拟器中运行
-  static bool get _isIosSimulator {
+  static bool get _isIOSSimulator {
     if (!Platform.isIOS) return false;
-    // 通过检查模拟器标识符来检测iOS模拟器
     try {
-      final simulatorIdentifier = Platform.environment['SIMULATOR_MODEL_IDENTIFIER'];
-      return simulatorIdentifier != null && simulatorIdentifier.isNotEmpty;
+      // iOS 模拟器运行在 x86_64/arm64 Mac 上，
+      // operatingSystemVersion 中不会包含真机特征
+      // 使用 Platform.environment 检查 SIMULATOR_DEVICE_NAME
+      return Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');
     } catch (_) {
       return false;
     }
@@ -80,7 +80,7 @@ class NetworkConfig {
     } else if (Platform.isIOS) {
       // iOS模拟器使用localhost/127.0.0.1访问宿主机
       // iOS真机使用配置的IP
-      final iosHost = _isIosSimulator ? 'localhost' : host;
+      final iosHost = _isIOSSimulator ? 'localhost' : host;
       return 'http://$iosHost:$port/api/v1';
     }
     // 桌面平台使用ZeroTier网络IP
@@ -94,7 +94,7 @@ class NetworkConfig {
       return _isAndroidEmulator ? '10.0.2.2' : defaultServerHost;
     } else if (Platform.isIOS) {
       // iOS模拟器使用localhost
-      return _isIosSimulator ? 'localhost' : defaultServerHost;
+      return _isIOSSimulator ? 'localhost' : defaultServerHost;
     }
     return defaultServerHost;
   }
