@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/services/media_service.dart';
@@ -48,7 +49,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       if (message.roomId == _currentRoomId) {
         add(NewMessageReceived(message));
       }
-    });
+    }, onError: (error) {
+      // 忽略流错误，避免 bloc 崩溃
+    }, cancelOnError: false);
     
     // 监听已读回执事件
     _readReceiptSubscription = _repository.readReceiptStream.listen((data) {
@@ -63,7 +66,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
           readAt: DateTime.parse(readAtStr),
         ));
       }
-    });
+    }, onError: (error) {
+      // 忽略流错误，避免 bloc 崩溃
+    }, cancelOnError: false);
   }
 
   Future<void> _onLoadMessages(
@@ -154,7 +159,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     
     // 创建临时消息并立即显示
     final tempMessage = Message(
-      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'temp_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999)}',
       roomId: _currentRoomId!,
       senderId: 'current_user_id', // 当前用户ID
       senderName: '我',
@@ -223,7 +228,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
 
     // 创建临时消息
     final tempMessage = Message(
-      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'temp_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999)}',
       roomId: _currentRoomId!,
       senderId: 'current_user_id',
       senderName: '我',

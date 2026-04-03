@@ -141,6 +141,7 @@ class _LoginPageState extends State<LoginPage> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
+            _passwordController.clear();
             context.go('/');
           } else if (state is AuthMFARequired) {
             ScaffoldMessenger.of(context).showSnackBar(

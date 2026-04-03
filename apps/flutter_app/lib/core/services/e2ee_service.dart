@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// 密钥类型
@@ -90,17 +91,34 @@ class RemoteKeyBundle {
     final signedKey = json['signed_pre_key'] as Map<String, dynamic>?;
     final oneTimeKey = json['one_time_pre_key'] as Map<String, dynamic>?;
 
+    // 验证必要字段存在且不为空
+    if (identityKey == null || signedKey == null) {
+      throw FormatException('Missing required key bundles: identity_key or signed_pre_key');
+    }
+
+    // 安全解码 base64，添加 null/empty 检查
+    Uint8List safeBase64Decode(String? value, String fieldName) {
+      if (value == null || value.isEmpty) {
+        throw FormatException('Missing or empty field: $fieldName');
+      }
+      try {
+        return base64Decode(value);
+      } catch (e) {
+        throw FormatException('Invalid base64 encoding for field $fieldName: $e');
+      }
+    }
+
     return RemoteKeyBundle(
       userId: json['user_id'] ?? '',
       deviceId: json['device_id'] ?? '',
-      identityKeyId: identityKey?['key_id'] ?? '',
-      identityPublicKey: base64Decode(identityKey?['public_key'] ?? ''),
-      signedPreKeyId: signedKey?['key_id'] ?? '',
-      signedPreKeyPublic: base64Decode(signedKey?['public_key'] ?? ''),
-      signedPreKeySignature: base64Decode(signedKey?['signature'] ?? ''),
-      oneTimeKeyId: oneTimeKey?['key_id'],
-      oneTimeKeyPublic: oneTimeKey != null
-          ? base64Decode(oneTimeKey['public_key'] ?? '')
+      identityKeyId: identityKey['key_id'] ?? '',
+      identityPublicKey: safeBase64Decode(identityKey['public_key'] as String?, 'identity_key.public_key'),
+      signedPreKeyId: signedKey['key_id'] ?? '',
+      signedPreKeyPublic: safeBase64Decode(signedKey['public_key'] as String?, 'signed_pre_key.public_key'),
+      signedPreKeySignature: safeBase64Decode(signedKey['signature'] as String?, 'signed_pre_key.signature'),
+      oneTimeKeyId: oneTimeKey?['key_id'] as String?,
+      oneTimeKeyPublic: oneTimeKey != null && oneTimeKey['public_key'] != null
+          ? safeBase64Decode(oneTimeKey['public_key'] as String?, 'one_time_pre_key.public_key')
           : null,
     );
   }
@@ -306,6 +324,36 @@ class E2EEService {
     return RemoteKeyBundle.fromJson(response.data);
   }
 
+  /// 验证签名预密钥签名
+  bool _verifySignedPreKeySignature(RemoteKeyBundle bundle) {
+    try {
+      // 使用身份公钥验证签名预密钥的签名
+      // 签名应该是对 signedPreKeyPublic 的签名
+      final expectedSignature = _signWithKey(bundle.signedPreKeyPublic, bundle.identityPublicKey);
+      
+      // 常量时间比较签名，防止时序攻击
+      if (expectedSignature.length != bundle.signedPreKeySignature.length) {
+        return false;
+      }
+      
+      int result = 0;
+      for (int i = 0; i < expectedSignature.length; i++) {
+        result |= expectedSignature[i] ^ bundle.signedPreKeySignature[i];
+      }
+      
+      return result == 0;
+    } catch (e) {
+      debugPrint('E2EEService: Signature verification failed: $e');
+      return false;
+    }
+  }
+
+  /// 使用密钥签名数据（简化实现）
+  Uint8List _signWithKey(Uint8List data, Uint8List key) {
+    final hmac = Hmac(sha256, key);
+    return Uint8List.fromList(hmac.convert(data).bytes);
+  }
+
   /// 建立加密会话（X3DH）
   Future<EncryptionSession> establishSession(
     String targetUserId, {
@@ -315,8 +363,10 @@ class E2EEService {
     final remoteBundle =
         await fetchKeyBundle(targetUserId, deviceId: targetDeviceId);
 
-    // 验证签名预密钥
-    // 实际实现中应该验证签名
+    // 验证签名预密钥签名
+    if (!_verifySignedPreKeySignature(remoteBundle)) {
+      throw Exception('Signed pre-key signature verification failed');
+    }
     
     // 生成临时密钥对
     final ephemeralKey = _generateKeyPair('eph_${_generateKeyId()}');

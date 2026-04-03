@@ -100,7 +100,7 @@ class NetworkOptimizer {
   /// 缓存持续时间（默认 5 分钟）
   static const Duration defaultCacheDuration = Duration(minutes: 5);
 
-  /// 获取缓存数据
+  /// 获取缓存数据（惰性清理过期条目）
   static T? getCached<T>(String key) {
     final entry = _cache[key];
     if (entry == null) return null;
@@ -109,6 +109,9 @@ class NetworkOptimizer {
       _cache.remove(key);
       return null;
     }
+    
+    // 惰性清理：每次访问时清理过期条目
+    _cleanupExpiredEntries();
     
     return entry.data as T?;
   }
@@ -125,6 +128,26 @@ class NetworkOptimizer {
   static void clearCache() {
     _cache.clear();
     debugPrint('[Performance] Network cache cleared');
+  }
+
+  /// 清理过期条目
+  static void _cleanupExpiredEntries() {
+    final now = DateTime.now();
+    final expiredKeys = <String>[];
+    
+    for (final entry in _cache.entries) {
+      if (now.isAfter(entry.value.expiryTime)) {
+        expiredKeys.add(entry.key);
+      }
+    }
+    
+    for (final key in expiredKeys) {
+      _cache.remove(key);
+    }
+    
+    if (expiredKeys.isNotEmpty) {
+      debugPrint('[Performance] Cleaned up ${expiredKeys.length} expired cache entries');
+    }
   }
 
   /// 获取缓存统计
@@ -167,10 +190,22 @@ class MemoryOptimizer {
 /// Widget 重建优化工具
 mixin RebuildOptimizer<T extends StatefulWidget> on State<T> {
   final Set<String> _rebuildReasons = {};
+  
+  /// 最大历史记录限制
+  static const int maxHistorySize = 50;
 
   /// 记录重建原因
   void logRebuild(String reason) {
     if (kDebugMode) {
+      // 如果超过最大限制，移除最早的记录
+      if (_rebuildReasons.length >= maxHistorySize) {
+        // Set 是无序的，转换为 List 后移除第一个
+        final reasonsList = _rebuildReasons.toList();
+        _rebuildReasons.clear();
+        for (int i = 1; i < reasonsList.length; i++) {
+          _rebuildReasons.add(reasonsList[i]);
+        }
+      }
       _rebuildReasons.add(reason);
       debugPrint('[Rebuild] ${widget.runtimeType}: $reason');
     }
@@ -179,5 +214,10 @@ mixin RebuildOptimizer<T extends StatefulWidget> on State<T> {
   /// 获取重建历史
   List<String> getRebuildHistory() {
     return _rebuildReasons.toList();
+  }
+
+  /// 清理重建历史
+  void clearRebuildHistory() {
+    _rebuildReasons.clear();
   }
 }

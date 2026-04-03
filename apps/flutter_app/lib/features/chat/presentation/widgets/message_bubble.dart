@@ -58,6 +58,10 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (widget.message.autoDeleteAt != null && !widget.message.isDeleted) {
       _updateRemainingTime();
       _countdownTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (!mounted) {
+          _countdownTimer?.cancel();
+          return;
+        }
         _updateRemainingTime();
       });
     }

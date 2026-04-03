@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:dio/dio.dart';
 import '../../domain/entities/user.dart';
+import '../../domain/repositories/auth_repository.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/register_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
@@ -16,12 +17,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final RegisterUseCase registerUseCase;
   final LogoutUseCase logoutUseCase;
   final OAuthLoginUseCase oauthLoginUseCase;
+  final AuthRepository authRepository;
 
   AuthBloc({
     required this.loginUseCase,
     required this.registerUseCase,
     required this.logoutUseCase,
     required this.oauthLoginUseCase,
+    required this.authRepository,
   }) : super(AuthInitial()) {
     on<LoginRequested>(_onLoginRequested);
     on<RegisterRequested>(_onRegisterRequested);
@@ -29,6 +32,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<GoogleLoginRequested>(_onGoogleLoginRequested);
     on<WeChatLoginRequested>(_onWeChatLoginRequested);
+    on<MFAVerifyRequested>(_onMFAVerifyRequested);
   }
 
   Future<void> _onLoginRequested(
@@ -207,6 +211,34 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } catch (e) {
       notificationSoundService.playErrorSound();
       emit(AuthError(message: '微信登录失败: ${e.toString()}'));
+    }
+  }
+
+  /// MFA 验证处理
+  Future<void> _onMFAVerifyRequested(
+    MFAVerifyRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      final result = await authRepository.verifyMFA(
+        username: event.username,
+        password: event.password,
+        code: event.code,
+        deviceId: event.deviceId,
+      );
+
+      if (result.user != null) {
+        emit(AuthAuthenticated(user: result.user));
+      } else {
+        emit(AuthError(message: 'MFA 验证失败，请重试'));
+      }
+    } catch (e) {
+      if (_isConnectionError(e)) {
+        notificationSoundService.playErrorSound();
+      }
+      emit(AuthError(message: _mapErrorMessage(e)));
     }
   }
 }

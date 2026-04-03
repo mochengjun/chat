@@ -68,7 +68,7 @@ class OAuthDataSourceImpl implements OAuthDataSource {
       final GoogleSignInAuthentication auth = await account.authentication;
       return auth.idToken;
     } catch (e) {
-      debugPrint('Google Sign-In failed: $e');
+      debugPrint('Google Sign-In error (details redacted)');
       return null;
     }
   }
@@ -118,7 +118,7 @@ class OAuthDataSourceImpl implements OAuthDataSource {
     try {
       await _googleSignIn.signOut();
     } catch (e) {
-      debugPrint('Google Sign-Out failed: $e');
+      debugPrint('Google Sign-Out error (details redacted)');
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -27,26 +28,30 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
   Future<Database> get database async {
     if (_database != null) return _database!;
     await init();
+    if (_database == null) {
+      throw StateError('Failed to initialize database');
+    }
     return _database!;
   }
 
   @override
   Future<void> init() async {
-    // Windows/Linux/macOS 需要初始化 FFI
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
-    
-    // 获取数据库路径
-    final databasesPath = await getDatabasesPath();
-    final path = join(databasesPath, 'chat_cache.db');
+    try {
+      // Windows/Linux/macOS 需要初始化 FFI
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
+      
+      // 获取数据库路径
+      final databasesPath = await getDatabasesPath();
+      final path = join(databasesPath, 'chat_cache.db');
 
-    _database = await openDatabase(
-      path,
-      version: 1,
-      onCreate: (db, version) async {
-        await db.execute('''
+      _database = await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute('''
           CREATE TABLE rooms (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -94,7 +99,11 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
             'CREATE INDEX idx_messages_created_at ON messages(created_at)'
           );
         },
-    );
+      );
+    } catch (e) {
+      _database = null;
+      rethrow;
+    }
   }
 
   @override
@@ -106,7 +115,11 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
       final lastMessageJson = row['last_message_json'] as String?;
       Map<String, dynamic>? lastMessage;
       if (lastMessageJson != null && lastMessageJson.isNotEmpty) {
-        lastMessage = _decodeJson(lastMessageJson);
+        try {
+          lastMessage = jsonDecode(lastMessageJson) as Map<String, dynamic>;
+        } catch (_) {
+          lastMessage = null;
+        }
       }
       
       return RoomModel.fromJson({
@@ -130,45 +143,47 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
   @override
   Future<void> cacheRooms(List<Room> rooms) async {
     final db = await database;
-    final batch = db.batch();
-    
-    for (final room in rooms) {
-      final lastMessageJson = room.lastMessage != null 
-          ? _encodeJson(MessageModel.fromJson({
-              'id': room.lastMessage!.id,
-              'room_id': room.lastMessage!.roomId,
-              'sender_id': room.lastMessage!.senderId,
-              'sender_name': room.lastMessage!.senderName,
-              'content': room.lastMessage!.content,
-              'type': room.lastMessage!.type.name,
-              'status': room.lastMessage!.status.name,
-              'created_at': room.lastMessage!.createdAt.toIso8601String(),
-            }).toJson())
-          : null;
+    await db.transaction((txn) async {
+      final batch = txn.batch();
       
-      batch.insert(
-        'rooms',
-        {
-          'id': room.id,
-          'name': room.name,
-          'description': room.description,
-          'avatar_url': room.avatarUrl,
-          'type': room.type.name,
-          'unread_count': room.unreadCount,
-          'creator_id': room.creatorId,
-          'is_muted': room.isMuted ? 1 : 0,
-          'is_pinned': room.isPinned ? 1 : 0,
-          'retention_hours': room.retentionHours,
-          'created_at': room.createdAt.toIso8601String(),
-          'updated_at': room.updatedAt?.toIso8601String(),
-          'last_message_json': lastMessageJson,
-          'cached_at': DateTime.now().toIso8601String(),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    
-    await batch.commit(noResult: true);
+      for (final room in rooms) {
+        final lastMessageJson = room.lastMessage != null 
+            ? jsonEncode(MessageModel.fromJson({
+                'id': room.lastMessage!.id,
+                'room_id': room.lastMessage!.roomId,
+                'sender_id': room.lastMessage!.senderId,
+                'sender_name': room.lastMessage!.senderName,
+                'content': room.lastMessage!.content,
+                'type': room.lastMessage!.type.name,
+                'status': room.lastMessage!.status.name,
+                'created_at': room.lastMessage!.createdAt.toIso8601String(),
+              }).toJson())
+            : null;
+        
+        batch.insert(
+          'rooms',
+          {
+            'id': room.id,
+            'name': room.name,
+            'description': room.description,
+            'avatar_url': room.avatarUrl,
+            'type': room.type.name,
+            'unread_count': room.unreadCount,
+            'creator_id': room.creatorId,
+            'is_muted': room.isMuted ? 1 : 0,
+            'is_pinned': room.isPinned ? 1 : 0,
+            'retention_hours': room.retentionHours,
+            'created_at': room.createdAt.toIso8601String(),
+            'updated_at': room.updatedAt?.toIso8601String(),
+            'last_message_json': lastMessageJson,
+            'cached_at': DateTime.now().toIso8601String(),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      
+      await batch.commit(noResult: true);
+    });
   }
 
   @override
@@ -186,7 +201,11 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
       final metadataJson = row['metadata_json'] as String?;
       Map<String, dynamic>? metadata;
       if (metadataJson != null && metadataJson.isNotEmpty) {
-        metadata = _decodeJson(metadataJson);
+        try {
+          metadata = jsonDecode(metadataJson) as Map<String, dynamic>;
+        } catch (_) {
+          metadata = null;
+        }
       }
       
       return MessageModel.fromJson({
@@ -213,17 +232,19 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
   @override
   Future<void> cacheMessages(List<Message> messages) async {
     final db = await database;
-    final batch = db.batch();
-    
-    for (final message in messages) {
-      batch.insert(
-        'messages',
-        _messageToRow(message),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    
-    await batch.commit(noResult: true);
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      
+      for (final message in messages) {
+        batch.insert(
+          'messages',
+          _messageToRow(message),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      
+      await batch.commit(noResult: true);
+    });
   }
 
   @override
@@ -289,100 +310,11 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
       'thumbnail_url': message.thumbnailUrl,
       'media_size': message.mediaSize,
       'mime_type': message.mimeType,
-      'metadata_json': message.metadata != null ? _encodeJson(message.metadata!) : null,
+      'metadata_json': message.metadata != null ? jsonEncode(message.metadata!) : null,
       'created_at': message.createdAt.toIso8601String(),
       'edited_at': message.editedAt?.toIso8601String(),
       'is_deleted': message.isDeleted ? 1 : 0,
       'cached_at': DateTime.now().toIso8601String(),
     };
-  }
-
-  String _encodeJson(Map<String, dynamic> json) {
-    final buffer = StringBuffer('{');
-    var first = true;
-    json.forEach((key, value) {
-      if (!first) buffer.write(',');
-      first = false;
-      buffer.write('"$key":');
-      if (value is String) {
-        buffer.write('"${value.replaceAll('"', '\\"')}"');
-      } else if (value is num || value is bool) {
-        buffer.write(value);
-      } else if (value == null) {
-        buffer.write('null');
-      } else {
-        buffer.write('"$value"');
-      }
-    });
-    buffer.write('}');
-    return buffer.toString();
-  }
-
-  Map<String, dynamic>? _decodeJson(String jsonStr) {
-    try {
-      final result = <String, dynamic>{};
-      final content = jsonStr.substring(1, jsonStr.length - 1);
-      if (content.isEmpty) return result;
-      
-      var depth = 0;
-      var inString = false;
-      var escaped = false;
-      var start = 0;
-      
-      for (var i = 0; i < content.length; i++) {
-        final char = content[i];
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (char == '\\') {
-          escaped = true;
-          continue;
-        }
-        if (char == '"') {
-          inString = !inString;
-        }
-        if (!inString) {
-          if (char == '{' || char == '[') depth++;
-          if (char == '}' || char == ']') depth--;
-          if (char == ',' && depth == 0) {
-            _parseKeyValue(content.substring(start, i), result);
-            start = i + 1;
-          }
-        }
-      }
-      if (start < content.length) {
-        _parseKeyValue(content.substring(start), result);
-      }
-      
-      return result;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void _parseKeyValue(String kv, Map<String, dynamic> result) {
-    final colonIndex = kv.indexOf(':');
-    if (colonIndex == -1) return;
-    
-    var key = kv.substring(0, colonIndex).trim();
-    var value = kv.substring(colonIndex + 1).trim();
-    
-    if (key.startsWith('"') && key.endsWith('"')) {
-      key = key.substring(1, key.length - 1);
-    }
-    
-    if (value == 'null') {
-      result[key] = null;
-    } else if (value == 'true') {
-      result[key] = true;
-    } else if (value == 'false') {
-      result[key] = false;
-    } else if (value.startsWith('"') && value.endsWith('"')) {
-      result[key] = value.substring(1, value.length - 1);
-    } else {
-      final numValue = num.tryParse(value);
-      result[key] = numValue ?? value;
-    }
   }
 }

@@ -23,7 +23,7 @@ class LoginRequested extends AuthEvent {
   });
 
   @override
-  List<Object?> get props => [username, password, deviceId, deviceName, deviceType];
+  List<Object?> get props => [username, deviceId, deviceName, deviceType];
 }
 
 class RegisterRequested extends AuthEvent {
@@ -42,7 +42,7 @@ class RegisterRequested extends AuthEvent {
   });
 
   @override
-  List<Object?> get props => [username, password, phoneNumber, email, displayName];
+  List<Object?> get props => [username, phoneNumber, email, displayName];
 }
 
 class LogoutRequested extends AuthEvent {
@@ -67,7 +67,7 @@ class MFAVerifyRequested extends AuthEvent {
   });
 
   @override
-  List<Object?> get props => [username, password, code, deviceId];
+  List<Object?> get props => [username, code, deviceId];
 }
 
 /// Google 登录请求

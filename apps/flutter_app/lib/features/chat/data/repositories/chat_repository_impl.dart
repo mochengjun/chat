@@ -157,7 +157,9 @@ class ChatRepositoryImpl implements ChatRepository {
         final payload = data['payload'] as Map<String, dynamic>;
         _readReceiptStreamController.add(payload);
       }
-    });
+    }, onError: (error) {
+      debugPrint('WebSocket message stream error: $error');
+    }, cancelOnError: false);
   }
 
   Message _parseMessage(Map<String, dynamic> data) {
@@ -459,8 +461,20 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   void dispose() {
-    _messageStreamController.close();
-    _roomUpdateStreamController.close();
-    _readReceiptStreamController.close();
+    try {
+      _messageStreamController.close();
+    } catch (e) {
+      debugPrint('Error closing messageStreamController: $e');
+    }
+    try {
+      _roomUpdateStreamController.close();
+    } catch (e) {
+      debugPrint('Error closing roomUpdateStreamController: $e');
+    }
+    try {
+      _readReceiptStreamController.close();
+    } catch (e) {
+      debugPrint('Error closing readReceiptStreamController: $e');
+    }
   }
 }

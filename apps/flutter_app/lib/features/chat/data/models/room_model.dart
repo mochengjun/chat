@@ -20,6 +20,13 @@ class RoomModel extends Room {
     super.updatedAt,
   });
 
+  /// 安全解析日期字符串，失败时返回 DateTime.now()
+  static DateTime _safeParseDate(dynamic dateStr) {
+    if (dateStr == null) return DateTime.now();
+    final parsed = DateTime.tryParse(dateStr.toString());
+    return parsed ?? DateTime.now();
+  }
+
   factory RoomModel.fromJson(Map<String, dynamic> json) {
     return RoomModel(
       id: json['id'] ?? json['room_id'],
@@ -40,11 +47,9 @@ class RoomModel extends Room {
       isMuted: json['is_muted'] ?? false,
       isPinned: json['is_pinned'] ?? false,
       retentionHours: json['retention_hours'],
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
+      createdAt: _safeParseDate(json['created_at']),
+      updatedAt: json['updated_at'] != null
+          ? _safeParseDate(json['updated_at'])
           : null,
     );
   }

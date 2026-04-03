@@ -32,6 +32,7 @@ class CallPage extends StatefulWidget {
 class _CallPageState extends State<CallPage> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final Map<String, RTCVideoRenderer> _remoteRenderers = {};
+  WebRTCService? _webrtcService;
 
   @override
   void initState() {
@@ -45,16 +46,27 @@ class _CallPageState extends State<CallPage> {
   }
 
   void _setupRendererForUser(String userId, MediaStream stream) async {
-    if (!_remoteRenderers.containsKey(userId)) {
-      final renderer = RTCVideoRenderer();
-      await renderer.initialize();
-      renderer.srcObject = stream;
-      setState(() {
-        _remoteRenderers[userId] = renderer;
-      });
-    } else {
-      _remoteRenderers[userId]!.srcObject = stream;
-      setState(() {});
+    try {
+      if (!_remoteRenderers.containsKey(userId)) {
+        final renderer = RTCVideoRenderer();
+        await renderer.initialize();
+        renderer.srcObject = stream;
+        if (mounted) {
+          setState(() {
+            _remoteRenderers[userId] = renderer;
+          });
+        } else {
+          // Widget 已销毁，清理已分配的资源
+          renderer.dispose();
+        }
+      } else {
+        _remoteRenderers[userId]!.srcObject = stream;
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      debugPrint('Error setting up renderer for user $userId: $e');
     }
   }
 
@@ -66,6 +78,10 @@ class _CallPageState extends State<CallPage> {
 
   @override
   void dispose() {
+    // 清理 WebRTC 回调
+    _webrtcService?.onRemoteStream = null;
+    _webrtcService?.onParticipantLeft = null;
+    
     _localRenderer.dispose();
     for (final renderer in _remoteRenderers.values) {
       renderer.dispose();
@@ -78,6 +94,9 @@ class _CallPageState extends State<CallPage> {
     return BlocProvider(
       create: (context) {
         final bloc = getIt<CallBloc>();
+
+        // 保存 webrtcService 引用用于 dispose 清理
+        _webrtcService = bloc.webrtcService;
 
         // 设置远程流回调
         bloc.webrtcService.onRemoteStream = _setupRendererForUser;

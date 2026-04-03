@@ -23,6 +23,8 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
   String? _cachedCurrentUserId;
   // 当前打开的房间ID（用于判断是否增加未读数）
   String? _currentOpenRoomId;
+  // 竞态保护标志
+  bool _isRefreshing = false;
 
   RoomListBloc({
     required GetRoomsUseCase getRoomsUseCase,
@@ -63,7 +65,9 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
       final storage = getIt<SecureStorageService>();
       final userInfo = await storage.getUserInfo();
       _cachedCurrentUserId = userInfo['userId'];
-    } catch (_) {}
+    } catch (e) {
+      // 初始化失败时保持 _cachedCurrentUserId 为 null
+    }
   }
 
   Future<void> _onLoadRooms(
@@ -89,6 +93,10 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
     RefreshRooms event,
     Emitter<RoomListState> emit,
   ) async {
+    // 竞态保护：如果已经在刷新中，直接返回
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    
     try {
       final rooms = await _getRoomsUseCase();
 
@@ -106,6 +114,8 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
       } else {
         emit(RoomListError(message: e.toString()));
       }
+    } finally {
+      _isRefreshing = false;
     }
   }
 

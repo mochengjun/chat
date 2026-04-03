@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -250,6 +251,7 @@ class WebRTCService {
 
   // WebSocket信令连接
   WebSocketChannel? _signalingChannel;
+  StreamSubscription? _signalingSubscription;
   bool _isConnected = false;
 
   // WebRTC相关
@@ -332,10 +334,11 @@ class WebRTCService {
       Uri.parse('$wsUrl/signaling?token=$token'),
     );
 
-    _signalingChannel!.stream.listen(
+    // 保存订阅以便后续取消
+    _signalingSubscription = _signalingChannel!.stream.listen(
       _handleSignalingMessage,
       onError: (error) {
-        print('Signaling error: $error');
+        debugPrint('Signaling error: $error');
         _isConnected = false;
         _reconnectSignaling();
       },
@@ -398,7 +401,7 @@ class WebRTCService {
           break;
       }
     } catch (e) {
-      print('Error handling signaling message: $e');
+      debugPrint('Error handling signaling message: $e');
     }
   }
 
@@ -443,7 +446,7 @@ class WebRTCService {
 
       return call;
     } catch (e) {
-      print('Error initiating call: $e');
+      debugPrint('Error initiating call: $e');
       await _cleanupCall();
       rethrow;
     }
@@ -468,7 +471,7 @@ class WebRTCService {
         fromUser: '',
       ));
     } catch (e) {
-      print('Error accepting call: $e');
+      debugPrint('Error accepting call: $e');
       rethrow;
     }
   }
@@ -486,7 +489,7 @@ class WebRTCService {
 
       await _cleanupCall();
     } catch (e) {
-      print('Error rejecting call: $e');
+      debugPrint('Error rejecting call: $e');
       rethrow;
     }
   }
@@ -506,7 +509,7 @@ class WebRTCService {
         fromUser: '',
       ));
     } catch (e) {
-      print('Error ending call: $e');
+      debugPrint('Error ending call: $e');
     } finally {
       await _cleanupCall();
     }
@@ -561,7 +564,12 @@ class WebRTCService {
           : false,
     };
 
-    _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (e) {
+      debugPrint('Error getting user media: $e');
+      throw Exception('Failed to access camera/microphone: $e');
+    }
   }
 
   /// 创建PeerConnection并发送offer
@@ -630,7 +638,7 @@ class WebRTCService {
 
     // 连接状态回调
     pc.onConnectionState = (state) {
-      print('Connection state for $oderId: $state');
+      debugPrint('Connection state for $oderId: $state');
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // 处理连接失败
@@ -651,7 +659,7 @@ class WebRTCService {
       _callStateController.add(call);
       onIncomingCall?.call(call);
     } catch (e) {
-      print('Error handling call invite: $e');
+      debugPrint('Error handling call invite: $e');
     }
   }
 
@@ -714,7 +722,7 @@ class WebRTCService {
         },
       ));
     } catch (e) {
-      print('Error handling offer: $e');
+      debugPrint('Error handling offer: $e');
     }
   }
 
@@ -730,7 +738,7 @@ class WebRTCService {
         ));
       }
     } catch (e) {
-      print('Error handling answer: $e');
+      debugPrint('Error handling answer: $e');
     }
   }
 
@@ -747,7 +755,7 @@ class WebRTCService {
         ));
       }
     } catch (e) {
-      print('Error handling ICE candidate: $e');
+      debugPrint('Error handling ICE candidate: $e');
     }
   }
 
@@ -791,7 +799,7 @@ class WebRTCService {
       _callStateController.add(call);
       onCallStateChanged?.call(call);
     } catch (e) {
-      print('Error refreshing call info: $e');
+      debugPrint('Error refreshing call info: $e');
     }
   }
 
@@ -803,10 +811,14 @@ class WebRTCService {
     }
     _peerConnections.clear();
 
-    // 停止本地流
-    _localStream?.getTracks().forEach((track) => track.stop());
-    _localStream?.dispose();
-    _localStream = null;
+    // 停止本地流 - 使用 await 确保资源正确释放
+    if (_localStream != null) {
+      for (final track in _localStream!.getTracks()) {
+        await track.stop();
+      }
+      await _localStream!.dispose();
+      _localStream = null;
+    }
 
     // 清理远程流
     _remoteStreams.clear();
@@ -842,7 +854,11 @@ class WebRTCService {
   /// 释放资源
   Future<void> dispose() async {
     await _cleanupCall();
-    _signalingChannel?.sink.close();
-    _callStateController.close();
+    // 取消信令订阅
+    await _signalingSubscription?.cancel();
+    _signalingSubscription = null;
+    await _signalingChannel?.sink.close();
+    _signalingChannel = null;
+    await _callStateController.close();
   }
 }

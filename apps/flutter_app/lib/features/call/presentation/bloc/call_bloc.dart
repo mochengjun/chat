@@ -61,7 +61,7 @@ class CallBloc extends Bloc<CallEvent, CallState> {
 
     // 监听音频中断
     _audioSessionManager.onAudioInterrupted = (interrupted) {
-      if (interrupted && state is CallActive) {
+      if (interrupted && state is CallActive && !isClosed) {
         // 被中断时自动静音
         add(const ToggleMuteEvent(true));
       }
@@ -296,15 +296,15 @@ class CallBloc extends Bloc<CallEvent, CallState> {
   }
 
   /// 处理通话状态变更
-  void _onCallStateChanged(
+  Future<void> _onCallStateChanged(
     CallStateChangedEvent event,
     Emitter<CallState> emit,
-  ) {
+  ) async {
     final currentState = state;
 
     if (event.call == null) {
       // 通话结束
-      _audioSessionManager.deactivate();
+      await _audioSessionManager.deactivate();
       emit(const CallEnded());
     } else if (currentState is CallActive) {
       // 更新通话信息

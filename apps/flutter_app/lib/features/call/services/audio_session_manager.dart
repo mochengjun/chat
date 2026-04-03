@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
@@ -33,6 +34,11 @@ class AudioSessionManager {
   AudioRoute _currentRoute = AudioRoute.earpiece;
   List<AudioDeviceInfo> _availableDevices = [];
   bool _isActive = false;
+
+  // Stream 订阅，用于 dispose 时取消
+  StreamSubscription? _interruptionSubscription;
+  StreamSubscription? _becomingNoisySubscription;
+  StreamSubscription? _devicesChangedSubscription;
 
   // 回调
   void Function(AudioRoute route)? onAudioRouteChanged;
@@ -74,7 +80,7 @@ class AudioSessionManager {
       ));
 
       // 监听音频中断(来电等)
-      _audioSession!.interruptionEventStream.listen((event) {
+      _interruptionSubscription = _audioSession!.interruptionEventStream.listen((event) {
         debugPrint('Audio interruption: ${event.type}');
         if (event.begin) {
           // 音频被中断(如来电)
@@ -90,7 +96,7 @@ class AudioSessionManager {
       });
 
       // 监听音频路由变化(耳机拔出等)
-      _audioSession!.becomingNoisyEventStream.listen((_) {
+      _becomingNoisySubscription = _audioSession!.becomingNoisyEventStream.listen((_) {
         debugPrint('Audio becoming noisy (headphones unplugged)');
         // 耳机拔出,切换到听筒
         _currentRoute = AudioRoute.earpiece;
@@ -98,7 +104,7 @@ class AudioSessionManager {
       });
 
       // 监听设备变化
-      _audioSession!.devicesChangedEventStream.listen((event) {
+      _devicesChangedSubscription = _audioSession!.devicesChangedEventStream.listen((event) {
         _updateAvailableDevices();
       });
 
@@ -275,6 +281,14 @@ class AudioSessionManager {
 
   /// 释放资源
   Future<void> dispose() async {
+    // 取消所有 stream 订阅
+    await _interruptionSubscription?.cancel();
+    await _becomingNoisySubscription?.cancel();
+    await _devicesChangedSubscription?.cancel();
+    _interruptionSubscription = null;
+    _becomingNoisySubscription = null;
+    _devicesChangedSubscription = null;
+
     await deactivate();
     onAudioRouteChanged = null;
     onDevicesChanged = null;

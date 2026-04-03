@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
@@ -43,7 +44,7 @@ class AuthRepositoryImpl implements AuthRepository {
         );
       } catch (e) {
         // 获取用户信息失败不影响登录流程
-        print('Failed to get current user info: $e');
+        debugPrint('Failed to get current user info after login');
       }
     }
 
@@ -138,7 +139,7 @@ class AuthRepositoryImpl implements AuthRepository {
           username: user.username,
         );
       } catch (e) {
-        print('Failed to get current user info after MFA: $e');
+        debugPrint('Failed to get current user info after MFA');
       }
     }
 

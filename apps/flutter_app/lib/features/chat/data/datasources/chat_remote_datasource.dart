@@ -123,16 +123,34 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     int limit = 50,
     String? beforeId,
   }) async {
-    final queryParams = <String, dynamic>{
-      'limit': limit,
-      if (beforeId != null) 'before_id': beforeId,
-    };
-    final response = await _client.get(
-      '/chat/rooms/$roomId/messages',
-      queryParameters: queryParams,
-    );
-    final data = response.data['messages'] as List? ?? response.data as List? ?? [];
-    return data.map((json) => MessageModel.fromJson(json).toEntity()).toList();
+    try {
+      final queryParams = <String, dynamic>{
+        'limit': limit,
+        if (beforeId != null) 'before_id': beforeId,
+      };
+      final response = await _client.get(
+        '/chat/rooms/$roomId/messages',
+        queryParameters: queryParams,
+      );
+      final data = response.data['messages'] as List? ?? response.data as List? ?? [];
+      return data.map((json) => MessageModel.fromJson(json).toEntity()).toList();
+    } catch (e) {
+      // 如果 beforeId 无效，尝试不带 beforeId 重试一次
+      if (beforeId != null) {
+        try {
+          final response = await _client.get(
+            '/chat/rooms/$roomId/messages',
+            queryParameters: {'limit': limit},
+          );
+          final data = response.data['messages'] as List? ?? response.data as List? ?? [];
+          return data.map((json) => MessageModel.fromJson(json).toEntity()).toList();
+        } catch (_) {
+          // 重试失败，重新抛出原始异常
+          rethrow;
+        }
+      }
+      rethrow;
+    }
   }
 
   @override

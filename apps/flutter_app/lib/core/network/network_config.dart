@@ -55,6 +55,18 @@ class NetworkConfig {
     }
   }
 
+  /// 检测是否在iOS模拟器中运行
+  static bool get _isIosSimulator {
+    if (!Platform.isIOS) return false;
+    // 通过检查模拟器标识符来检测iOS模拟器
+    try {
+      final simulatorIdentifier = Platform.environment['SIMULATOR_MODEL_IDENTIFIER'];
+      return simulatorIdentifier != null && simulatorIdentifier.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 获取API基础URL
   static String getApiBaseUrl({String? overrideHost, int? overridePort}) {
     final host = overrideHost ?? defaultServerHost;
@@ -68,7 +80,7 @@ class NetworkConfig {
     } else if (Platform.isIOS) {
       // iOS模拟器使用localhost/127.0.0.1访问宿主机
       // iOS真机使用配置的IP
-      final iosHost = _isAndroidEmulator ? 'localhost' : host;
+      final iosHost = _isIosSimulator ? 'localhost' : host;
       return 'http://$iosHost:$port/api/v1';
     }
     // 桌面平台使用ZeroTier网络IP
@@ -82,7 +94,7 @@ class NetworkConfig {
       return _isAndroidEmulator ? '10.0.2.2' : defaultServerHost;
     } else if (Platform.isIOS) {
       // iOS模拟器使用localhost
-      return _isAndroidEmulator ? 'localhost' : defaultServerHost;
+      return _isIosSimulator ? 'localhost' : defaultServerHost;
     }
     return defaultServerHost;
   }

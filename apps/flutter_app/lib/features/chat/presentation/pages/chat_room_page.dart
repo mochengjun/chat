@@ -226,8 +226,8 @@ class _ChatRoomViewState extends State<_ChatRoomView> {
           reverse: true,
           padding: const EdgeInsets.symmetric(vertical: 8),
           addAutomaticKeepAlives: false,
-          addRepaintBoundaries: false,
-          cacheExtent: 800.0,
+          addRepaintBoundaries: true,
+          cacheExtent: 1500.0,
           findChildIndexCallback: (Key key) {
             if (key is ValueKey<String>) {
               final messageId = key.value;

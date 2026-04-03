@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
@@ -405,9 +406,10 @@ class MediaService {
     // 初始化上传会话
     final session = await initiateChunkedUpload(fileName, mimeType, fileSize);
 
-    // 读取并上传分片
-    final randomAccessFile = await file.open();
+    // 读取并上传分片 - 使用 try-finally 确保文件正确关闭
+    RandomAccessFile? randomAccessFile;
     try {
+      randomAccessFile = await file.open();
       for (int i = 0; i < session.totalChunks; i++) {
         final chunkData = await randomAccessFile.read(session.chunkSize);
         await uploadChunk(session.id, i, Uint8List.fromList(chunkData));
@@ -420,7 +422,8 @@ class MediaService {
         );
       }
     } finally {
-      await randomAccessFile.close();
+      // 确保文件句柄被关闭
+      await randomAccessFile?.close();
     }
 
     // 完成上传
@@ -440,7 +443,7 @@ class MediaService {
     }
   }
 
-  /// 下载媒体文件（支持断点续传）
+  /// 下载媒体文件（使用临时文件 + rename 策略避免损坏）
   Future<File> download(
     String mediaId, {
     String? savePath,
@@ -451,21 +454,15 @@ class MediaService {
     final targetPath = savePath ?? '${_cacheDir?.path ?? ''}/$mediaId';
     final targetFile = File(targetPath);
     
+    // 临时文件路径
+    final tempPath = '$targetPath.tmp';
+    final tempFile = File(tempPath);
+    
     // 检查缓存（仅完整下载时使用）
     if (useCache && resumeFromByte == null && _cacheDir != null) {
       final cachedFile = File('${_cacheDir!.path}/$mediaId');
       if (await cachedFile.exists()) {
         return cachedFile;
-      }
-    }
-
-    // 检查是否可以断点续传
-    int startByte = resumeFromByte ?? 0;
-    if (resumeFromByte == null && await targetFile.exists()) {
-      // 如果文件存在且未指定恢复点，检查是否是部分下载
-      final existingSize = await targetFile.length();
-      if (existingSize > 0) {
-        startByte = existingSize;
       }
     }
 
@@ -481,18 +478,15 @@ class MediaService {
         '$_baseUrl/media/$mediaId/download',
         options: Options(
           responseType: ResponseType.stream,
-          headers: startByte > 0 ? {'Range': 'bytes=$startByte-'} : null,
         ),
         cancelToken: cancelToken,
       );
 
-      // 打开文件以追加模式写入
-      final raf = await targetFile.open(
-        mode: startByte > 0 ? FileMode.append : FileMode.write,
-      );
+      // 使用临时文件写入，完成后再重命名
+      final raf = await tempFile.open(mode: FileMode.write);
 
       try {
-        int received = startByte;
+        int received = 0;
         final stream = response.data.stream as Stream<List<int>>;
         
         await for (final chunk in stream) {
@@ -504,7 +498,24 @@ class MediaService {
         await raf.close();
       }
 
+      // 下载完成，将临时文件重命名为目标文件
+      // 先删除可能存在的目标文件
+      if (await targetFile.exists()) {
+        await targetFile.delete();
+      }
+      await tempFile.rename(targetPath);
+
       return targetFile;
+    } catch (e) {
+      // 发生错误时删除临时文件
+      if (await tempFile.exists()) {
+        try {
+          await tempFile.delete();
+        } catch (_) {
+          // 忽略删除失败
+        }
+      }
+      rethrow;
     } finally {
       _downloadTasks.remove(mediaId);
     }

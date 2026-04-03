@@ -22,6 +22,13 @@ class MessageModel extends Message {
     super.autoDeleteAt,
   });
 
+  /// 安全解析日期字符串，失败时返回 DateTime.now()
+  static DateTime _safeParseDate(dynamic dateStr) {
+    if (dateStr == null) return DateTime.now();
+    final parsed = DateTime.tryParse(dateStr.toString());
+    return parsed ?? DateTime.now();
+  }
+
   factory MessageModel.fromJson(Map<String, dynamic> json) {
     return MessageModel(
       id: json['id'] ?? json['message_id'],
@@ -37,16 +44,14 @@ class MessageModel extends Message {
       mediaSize: json['media_size'],
       mimeType: json['mime_type'],
       metadata: json['metadata'],
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']).toLocal() 
-          : DateTime.now(),
-      editedAt: json['edited_at'] != null 
-          ? DateTime.parse(json['edited_at']).toLocal() 
+      createdAt: _safeParseDate(json['created_at']).toLocal(),
+      editedAt: json['edited_at'] != null
+          ? _safeParseDate(json['edited_at']).toLocal()
           : null,
       isDeleted: json['is_deleted'] ?? false,
       autoDeleteAfter: json['auto_delete_after'],
-      autoDeleteAt: json['auto_delete_at'] != null 
-          ? DateTime.parse(json['auto_delete_at']).toLocal() 
+      autoDeleteAt: json['auto_delete_at'] != null
+          ? _safeParseDate(json['auto_delete_at']).toLocal()
           : null,
     );
   }

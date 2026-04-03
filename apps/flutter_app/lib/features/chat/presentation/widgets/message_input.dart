@@ -24,11 +24,21 @@ class _MessageInputFieldState extends State<MessageInputField> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   bool _hasText = false;
+  bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void didUpdateWidget(MessageInputField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 当外部发送完成时重置本地发送状态
+    if (!widget.isSending && _isSending) {
+      _isSending = false;
+    }
   }
 
   @override
@@ -48,8 +58,9 @@ class _MessageInputFieldState extends State<MessageInputField> {
 
   void _handleSend() {
     final text = _controller.text.trim();
-    if (text.isEmpty || widget.isSending) return;
+    if (text.isEmpty || widget.isSending || _isSending) return;
     
+    _isSending = true;
     widget.onSendText(text);
     _controller.clear();
   }

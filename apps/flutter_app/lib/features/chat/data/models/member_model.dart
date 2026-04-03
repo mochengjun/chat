@@ -10,15 +10,20 @@ class MemberModel extends Member {
     super.isOnline,
   });
 
+  /// 安全解析日期字符串，失败时返回 DateTime.now()
+  static DateTime _safeParseDate(dynamic dateStr) {
+    if (dateStr == null) return DateTime.now();
+    final parsed = DateTime.tryParse(dateStr.toString());
+    return parsed ?? DateTime.now();
+  }
+
   factory MemberModel.fromJson(Map<String, dynamic> json) {
     return MemberModel(
       userId: json['user_id'],
       displayName: json['display_name'] ?? json['username'] ?? '',
       avatarUrl: json['avatar_url'],
       role: _parseRole(json['role']),
-      joinedAt: json['joined_at'] != null 
-          ? DateTime.parse(json['joined_at']) 
-          : DateTime.now(),
+      joinedAt: _safeParseDate(json['joined_at']),
       isOnline: json['is_online'] ?? false,
     );
   }

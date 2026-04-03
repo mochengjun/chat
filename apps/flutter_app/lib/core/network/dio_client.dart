@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 class DioClient {
   final Dio _dio;
@@ -11,11 +12,16 @@ class DioClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    return _dio.get(
-      path,
-      queryParameters: queryParameters,
-      options: options,
-    );
+    try {
+      return await _dio.get(
+        path,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } catch (e) {
+      debugPrint('DioClient GET error: $e');
+      rethrow;
+    }
   }
 
   // POST 请求
@@ -25,12 +31,17 @@ class DioClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    return _dio.post(
-      path,
-      data: data,
-      queryParameters: queryParameters,
-      options: options,
-    );
+    try {
+      return await _dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } catch (e) {
+      debugPrint('DioClient POST error: $e');
+      rethrow;
+    }
   }
 
   // PUT 请求
@@ -40,12 +51,17 @@ class DioClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    return _dio.put(
-      path,
-      data: data,
-      queryParameters: queryParameters,
-      options: options,
-    );
+    try {
+      return await _dio.put(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } catch (e) {
+      debugPrint('DioClient PUT error: $e');
+      rethrow;
+    }
   }
 
   // DELETE 请求
@@ -55,12 +71,17 @@ class DioClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
-    return _dio.delete(
-      path,
-      data: data,
-      queryParameters: queryParameters,
-      options: options,
-    );
+    try {
+      return await _dio.delete(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } catch (e) {
+      debugPrint('DioClient DELETE error: $e');
+      rethrow;
+    }
   }
 
   // 设置认证 Token

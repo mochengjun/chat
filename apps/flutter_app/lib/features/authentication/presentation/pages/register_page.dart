@@ -52,6 +52,8 @@ class _RegisterPageState extends State<RegisterPage> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthRegistered) {
+            _passwordController.clear();
+            _confirmPasswordController.clear();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('注册成功，请登录')),
             );
@@ -157,6 +159,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         }
                         if (value.length < 8) {
                           return '密码至少8个字符';
+                        }
+                        if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)').hasMatch(value)) {
+                          return '密码必须包含大写字母、小写字母和数字';
                         }
                         return null;
                       },

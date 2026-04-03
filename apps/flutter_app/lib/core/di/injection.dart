@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../network/dio_client.dart';
 import '../network/websocket_client.dart';
 import '../network/server_config_service.dart';
@@ -39,6 +40,9 @@ import '../../features/call/services/audio_session_manager.dart';
 import '../../features/call/presentation/bloc/call_bloc.dart';
 
 final getIt = GetIt.instance;
+
+// Token 刷新互斥锁标志
+bool _isRefreshing = false;
 
 Future<void> configureDependencies() async {
   // 从持久化存储读取服务器配置（若无存储则使用 NetworkConfig 默认值）
@@ -103,6 +107,7 @@ Future<void> configureDependencies() async {
     registerUseCase: getIt<RegisterUseCase>(),
     logoutUseCase: getIt<LogoutUseCase>(),
     oauthLoginUseCase: getIt<OAuthLoginUseCase>(),
+    authRepository: getIt<AuthRepository>(),
   ));
 
   // ==================== Chat Module ====================
@@ -113,7 +118,7 @@ Future<void> configureDependencies() async {
     // 延迟初始化，避免启动时数据库创建导致崩溃
     Future.delayed(const Duration(seconds: 3), () {
       ds.init().catchError((e) {
-        print('[DI] Chat local data source init failed: $e');
+        debugPrint('[DI] Chat local data source init failed: $e');
         // 数据库初始化失败不影响应用启动，可以继续使用内存缓存
       });
     });
@@ -173,7 +178,7 @@ Future<void> configureDependencies() async {
       baseUrl: apiBaseUrl,
     );
     // 异步初始化，不阻塞
-    service.initialize().catchError((e) => print('[DI] Media service init failed: $e'));
+    service.initialize().catchError((e) => debugPrint('[DI] Media service init failed: $e'));
     return service;
   });
 
@@ -195,7 +200,7 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<AudioSessionManager>(() {
     final manager = AudioSessionManager();
     // 异步初始化，不阻塞
-    manager.initialize().catchError((e) => print('[DI] Audio session init failed: $e'));
+    manager.initialize().catchError((e) => debugPrint('[DI] Audio session init failed: $e'));
     return manager;
   });
 
@@ -214,7 +219,7 @@ Future<void> configureDependencies() async {
       baseUrl: apiBaseUrl,
     );
     // 异步初始化，不阻塞
-    service.initialize().catchError((e) => print('[DI] E2EE service init failed: $e'));
+    service.initialize().catchError((e) => debugPrint('[DI] E2EE service init failed: $e'));
     return service;
   });
 }
@@ -245,7 +250,7 @@ Dio createDio(String baseUrl) {
       const maxRetries = 2;
       
       if (isRetryable && !isRefreshRequest && retryCount < maxRetries) {
-        print('[Dio] 连接失败，正在重试 (${retryCount + 1}/$maxRetries)...');
+        debugPrint('[Dio] 连接失败，正在重试 (${retryCount + 1}/$maxRetries)...');
         
         // 等待一小段时间后重试
         await Future.delayed(Duration(seconds: 1 + retryCount));
@@ -281,12 +286,40 @@ Dio createDio(String baseUrl) {
       
       // 只有当有 token 且不是刷新请求时才尝试刷新
       if (error.response?.statusCode == 401 && !isRefreshRequest) {
+        // 使用互斥锁防止多个 401 并发时重复刷新
+        if (_isRefreshing) {
+          // 已经有刷新在进行，等待后重试原请求
+          debugPrint('[Dio] Token refresh already in progress, waiting...');
+          await Future.delayed(const Duration(milliseconds: 500));
+          try {
+            final storage = getIt<SecureStorageService>();
+            final newToken = storage.getAccessTokenSync();
+            if (newToken != null && newToken.isNotEmpty) {
+              error.requestOptions.headers['Authorization'] = 'Bearer $newToken';
+              final response = await dio.fetch(error.requestOptions);
+              return handler.resolve(response);
+            }
+          } catch (e) {
+            // 重试失败，继续传递错误
+          }
+          return handler.next(error);
+        }
+        
+        _isRefreshing = true;
+        
         try {
           final storage = getIt<SecureStorageService>();
           final refreshToken = await storage.getRefreshToken();
 
           // 如果没有 refresh token，说明用户从未登录或已登出，直接传递错误
           if (refreshToken == null || refreshToken.isEmpty) {
+            handler.next(error);
+            return;
+          }
+
+          // 检查 AuthRemoteDataSource 是否已注册
+          if (!getIt.isRegistered<AuthRemoteDataSource>()) {
+            debugPrint('[Dio] AuthRemoteDataSource not registered, cannot refresh token');
             handler.next(error);
             return;
           }
@@ -307,11 +340,14 @@ Dio createDio(String baseUrl) {
           return handler.resolve(response);
         } catch (e) {
           // 刷新 token 失败，清除本地认证状态
+          debugPrint('[Dio] Token refresh failed: $e');
           try {
             final storage = getIt<SecureStorageService>();
             await storage.clearAuth();
           } catch (_) {}
           // 继续传递原来的 401 错误，让 UI 处理登录过期
+        } finally {
+          _isRefreshing = false;
         }
       }
       handler.next(error);

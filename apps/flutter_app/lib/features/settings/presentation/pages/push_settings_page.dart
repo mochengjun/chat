@@ -39,10 +39,13 @@ class _PushSettingsPageState extends State<PushSettingsPage> {
   }
 
   Future<void> _updateSettings(PushSettings newSettings) async {
+    final previousSettings = _settings;
     setState(() => _settings = newSettings);
     try {
       await _pushService.updateSettings(newSettings);
     } catch (e) {
+      // 网络请求失败，回滚到之前的设置
+      setState(() => _settings = previousSettings);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('保存设置失败')),

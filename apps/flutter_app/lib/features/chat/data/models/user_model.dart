@@ -21,8 +21,12 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final rawId = (json['user_id'] ?? json['id'] ?? '').toString().trim();
+    if (rawId.isEmpty) {
+      throw FormatException('userId cannot be empty');
+    }
     return UserModel(
-      id: json['user_id'] ?? json['id'] ?? '',
+      id: rawId,
       username: json['username'] ?? '',
       displayName: json['display_name'] ?? json['username'] ?? '',
       avatarUrl: json['avatar_url'],

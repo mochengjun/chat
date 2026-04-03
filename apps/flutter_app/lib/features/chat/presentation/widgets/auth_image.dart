@@ -88,8 +88,11 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
   Future<void> _loadHeaders() async {
     _isInitialized = false;
     _headers = await getAuthHeaders();
+    if (!mounted) return;
     _fullUrl = await getFullImageUrl(widget.imageUrl);
+    if (!mounted) return;
     _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
+    if (!mounted) return;
     _cacheKeySuffix = await _getCacheKeySuffix();
     _isInitialized = true;
     if (mounted) setState(() {});
@@ -208,7 +211,9 @@ class _AuthPhotoViewState extends State<AuthPhotoView> {
     });
 
     _headers = await getAuthHeaders();
+    if (!mounted) return;
     _fullUrl = await getFullImageUrl(widget.imageUrl);
+    if (!mounted) return;
     _cacheKeySuffix = await _getCacheKeySuffix();
 
     if (mounted) {

@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/network/dio_client.dart';
@@ -46,30 +48,43 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     String? deviceName,
     String? deviceType,
   }) async {
-    final response = await _client.post(
-      '/auth/login',
-      data: {
-        'username': username,
-        'password': password,
-        if (deviceId != null) 'device_id': deviceId,
-        if (deviceName != null) 'device_name': deviceName,
-        if (deviceType != null) 'device_type': deviceType,
-      },
-    );
+    try {
+      final response = await _client.post(
+        '/auth/login',
+        data: {
+          'username': username,
+          'password': password,
+          if (deviceId != null) 'device_id': deviceId,
+          if (deviceName != null) 'device_name': deviceName,
+          if (deviceType != null) 'device_type': deviceType,
+        },
+      );
 
-    final data = response.data;
-    
-    if (data['mfa_required'] == true) {
-      return const AuthResult(mfaRequired: true);
+      final data = response.data;
+      if (data == null) {
+        throw Exception('登录响应数据为空');
+      }
+
+      if (data['mfa_required'] == true) {
+        return const AuthResult(mfaRequired: true);
+      }
+
+      final accessToken = data['access_token'] as String?;
+      if (accessToken == null) {
+        throw Exception('登录响应缺少访问令牌');
+      }
+
+      _client.setAuthToken(accessToken);
+
+      return AuthResult(
+        accessToken: accessToken,
+        refreshToken: data['refresh_token'] as String?,
+        expiresIn: data['expires_in'] as int?,
+      );
+    } on DioException catch (e) {
+      debugPrint('Login failed: ${e.type}');
+      rethrow;
     }
-
-    _client.setAuthToken(data['access_token']);
-
-    return AuthResult(
-      accessToken: data['access_token'],
-      refreshToken: data['refresh_token'],
-      expiresIn: data['expires_in'],
-    );
   }
 
   @override
@@ -80,40 +95,68 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     String? email,
     String? displayName,
   }) async {
-    final response = await _client.post(
-      '/auth/register',
-      data: {
-        'username': username,
-        'password': password,
-        if (phoneNumber != null) 'phone_number': phoneNumber,
-        if (email != null) 'email': email,
-        if (displayName != null) 'display_name': displayName,
-      },
-    );
+    try {
+      final response = await _client.post(
+        '/auth/register',
+        data: {
+          'username': username,
+          'password': password,
+          if (phoneNumber != null) 'phone_number': phoneNumber,
+          if (email != null) 'email': email,
+          if (displayName != null) 'display_name': displayName,
+        },
+      );
 
-    final data = response.data;
-    return User(
-      userId: data['user_id'],
-      username: data['username'],
-      createdAt: DateTime.now(),
-    );
+      final data = response.data;
+      if (data == null) {
+        throw Exception('注册响应数据为空');
+      }
+
+      final userId = data['user_id'] as String?;
+      if (userId == null) {
+        throw Exception('注册响应缺少用户ID');
+      }
+
+      return User(
+        userId: userId,
+        username: data['username'] as String? ?? username,
+        createdAt: DateTime.now(),
+      );
+    } on DioException catch (e) {
+      debugPrint('Register failed: ${e.type}');
+      rethrow;
+    }
   }
 
   @override
   Future<AuthResult> refreshToken(String refreshToken) async {
-    final response = await _client.post(
-      '/auth/refresh',
-      data: {'refresh_token': refreshToken},
-    );
+    try {
+      final response = await _client.post(
+        '/auth/refresh',
+        data: {'refresh_token': refreshToken},
+      );
 
-    final data = response.data;
-    _client.setAuthToken(data['access_token']);
+      final data = response.data;
+      if (data == null) {
+        throw Exception('刷新令牌响应数据为空');
+      }
 
-    return AuthResult(
-      accessToken: data['access_token'],
-      refreshToken: data['refresh_token'],
-      expiresIn: data['expires_in'],
-    );
+      final accessToken = data['access_token'] as String?;
+      if (accessToken == null) {
+        throw Exception('刷新令牌响应缺少访问令牌');
+      }
+
+      _client.setAuthToken(accessToken);
+
+      return AuthResult(
+        accessToken: accessToken,
+        refreshToken: data['refresh_token'] as String?,
+        expiresIn: data['expires_in'] as int?,
+      );
+    } on DioException catch (e) {
+      debugPrint('Refresh token failed: ${e.type}');
+      rethrow;
+    }
   }
 
   @override
@@ -152,23 +195,37 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String code,
     String? deviceId,
   }) async {
-    final response = await _client.post(
-      '/auth/verify-mfa',
-      data: {
-        'username': username,
-        'password': password,
-        'code': code,
-        if (deviceId != null) 'device_id': deviceId,
-      },
-    );
+    try {
+      final response = await _client.post(
+        '/auth/verify-mfa',
+        data: {
+          'username': username,
+          'password': password,
+          'code': code,
+          if (deviceId != null) 'device_id': deviceId,
+        },
+      );
 
-    final data = response.data;
-    _client.setAuthToken(data['access_token']);
+      final data = response.data;
+      if (data == null) {
+        throw Exception('MFA验证响应数据为空');
+      }
 
-    return AuthResult(
-      accessToken: data['access_token'],
-      refreshToken: data['refresh_token'],
-      expiresIn: data['expires_in'],
-    );
+      final accessToken = data['access_token'] as String?;
+      if (accessToken == null) {
+        throw Exception('MFA验证响应缺少访问令牌');
+      }
+
+      _client.setAuthToken(accessToken);
+
+      return AuthResult(
+        accessToken: accessToken,
+        refreshToken: data['refresh_token'] as String?,
+        expiresIn: data['expires_in'] as int?,
+      );
+    } on DioException catch (e) {
+      debugPrint('MFA verify failed: ${e.type}');
+      rethrow;
+    }
   }
 }
