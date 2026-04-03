@@ -11,6 +11,7 @@ import (
 	_ "image/png"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -205,6 +206,27 @@ func (s *mediaService) Upload(ctx context.Context, userID string, file *multipar
 		return nil, fmt.Errorf("failed to open uploaded file: %w", err)
 	}
 	defer src.Close()
+
+	// 验证文件内容签名（Magic Bytes）
+	// 读取前 512 字节用于检测实际 MIME 类型
+	buf := make([]byte, 512)
+	n, err := src.Read(buf)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	// 使用 http.DetectContentType 检测实际类型
+	detectedType := http.DetectContentType(buf[:n])
+
+	// 交叉验证：检测到的类型必须与声明的类型属于同一大类
+	if !s.isContentTypeMatch(mimeType, detectedType) {
+		return nil, fmt.Errorf("file content does not match declared type: declared=%s, detected=%s", mimeType, detectedType)
+	}
+
+	// 重置文件指针到开头
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to reset file pointer: %w", err)
+	}
 
 	// 生成文件ID和路径
 	mediaID := uuid.New().String()
@@ -793,6 +815,29 @@ func (s *mediaService) isAllowedType(mediaType repository.MediaType, mimeType st
 	}
 
 	return false
+}
+
+// isContentTypeMatch 检查声明的 MIME 类型与检测到的类型是否匹配
+// 使用大类匹配（image/*, video/*, audio/*, application/*）
+func (s *mediaService) isContentTypeMatch(declared, detected string) bool {
+	// 提取大类（如 "image" from "image/jpeg"）
+	declaredParts := strings.Split(declared, "/")
+	detectedParts := strings.Split(detected, "/")
+
+	if len(declaredParts) < 1 || len(detectedParts) < 1 {
+		return false
+	}
+
+	declaredMajor := declaredParts[0]
+	detectedMajor := detectedParts[0]
+
+	// application/octet-stream 是通用二进制类型，允许匹配任何类型
+	if detected == "application/octet-stream" {
+		return true
+	}
+
+	// 大类必须匹配
+	return declaredMajor == detectedMajor
 }
 
 // processImage 处理图片（获取尺寸、生成缩略图）

@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
+	"sec-chat/auth-service/internal/middleware"
 	"sec-chat/auth-service/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -19,30 +18,7 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-
-		// 允许空origin（某些客户端如桌面应用、Postman等）
-		if origin == "" || origin == "null" {
-			log.Printf("WebSocket connection allowed from empty/null origin")
-			return true
-		}
-
-		// 从环境变量读取允许的域名列表
-		allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
-		if allowedOriginsStr == "" {
-			// 开发环境默认值
-			allowedOriginsStr = "http://localhost:3000,http://localhost:5173"
-		}
-		allowedOrigins := strings.Split(allowedOriginsStr, ",")
-		for _, allowed := range allowedOrigins {
-			if origin == strings.TrimSpace(allowed) {
-				return true
-			}
-		}
-		log.Printf("WebSocket connection rejected from origin: %s", origin)
-		return false
-	},
+	CheckOrigin:     CheckWebSocketOrigin,
 }
 
 // WSMessage WebSocket 消息
@@ -123,7 +99,7 @@ func (h *WSHub) Run() {
 			if timer, ok := h.offlineTimers[client.userID]; ok {
 				timer.Stop()
 				delete(h.offlineTimers, client.userID)
-				log.Printf("User %s reconnected within grace period", client.userID)
+				log.Printf("User %s reconnected within grace period", middleware.MaskUserID(client.userID))
 			}
 
 			// 初始化用户的连接映射（如果不存在）
@@ -142,7 +118,7 @@ func (h *WSHub) Run() {
 			_ = wasOnline
 
 			log.Printf("WebSocket client registered: user=%s conn=%s (total connections: %d)",
-				client.userID, client.connID, len(h.clients[client.userID]))
+				middleware.MaskUserID(client.userID), client.connID[:8], len(h.clients[client.userID]))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -187,7 +163,7 @@ func (h *WSHub) Run() {
 								// 宽限期结束且未重连，标记离线
 								h.chatService.SetUserOffline(userID)
 								h.broadcastPresenceToRooms(userID, savedRoomIDs, false)
-								log.Printf("User %s marked offline after grace period", userID)
+								log.Printf("User %s marked offline after grace period", middleware.MaskUserID(userID))
 							} else {
 								delete(h.offlineTimers, userID)
 								h.mu.Unlock()
@@ -197,7 +173,7 @@ func (h *WSHub) Run() {
 				}
 			}
 			h.mu.Unlock()
-			log.Printf("WebSocket client unregistered: user=%s conn=%s", client.userID, client.connID)
+			log.Printf("WebSocket client unregistered: user=%s conn=%s", middleware.MaskUserID(client.userID), client.connID[:8])
 
 		case action := <-h.joinRoom:
 			h.mu.Lock()
@@ -213,7 +189,7 @@ func (h *WSHub) Run() {
 			action.Client.roomsMux.Lock()
 			action.Client.rooms[action.RoomID] = true
 			action.Client.roomsMux.Unlock()
-			log.Printf("Client %s (conn=%s) joined room %s", action.Client.userID, action.Client.connID, action.RoomID)
+			log.Printf("Client %s (conn=%s) joined room %s", middleware.MaskUserID(action.Client.userID), action.Client.connID[:8], action.RoomID)
 
 		case action := <-h.leaveRoom:
 			h.mu.Lock()

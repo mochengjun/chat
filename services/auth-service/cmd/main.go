@@ -21,7 +21,7 @@ import (
 func main() {
 	// 获取配置
 	dbType := getEnv("DB_TYPE", "sqlite") // sqlite 或 postgres
-	databaseURL := getEnv("DATABASE_URL", "postgres://synapse:synapse_password@localhost:5432/synapse?sslmode=disable")
+	databaseURL := getEnv("DATABASE_URL", "")
 	sqlitePath := getEnv("SQLITE_PATH", "./auth.db")
 	
 	// JWT Secret - 强制要求环境变量
@@ -47,6 +47,9 @@ func main() {
 			Logger: logger.Default.LogMode(logger.Info),
 		})
 	} else {
+		if databaseURL == "" {
+			log.Fatal("DATABASE_URL environment variable is required when using PostgreSQL. Please set it in .env file.")
+		}
 		log.Println("Using PostgreSQL database")
 		db, err = gorm.Open(postgres.Open(databaseURL), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Info),
@@ -173,6 +176,9 @@ func main() {
 		c.Next()
 	})
 
+	// 安全响应头
+	router.Use(middleware.SecurityHeaders())
+
 	// 健康检查
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "auth-service", "db_type": dbType})
@@ -188,8 +194,8 @@ func main() {
 		// 公开接口
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
+			auth.POST("/register", middleware.LoginRateLimit(), authHandler.Register)
+			auth.POST("/login", middleware.LoginRateLimit(), authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/verify-mfa", authHandler.VerifyMFA)
 			auth.POST("/send-sms-code", authHandler.SendSMSCode)
@@ -466,7 +472,10 @@ func autoMigrate(db *gorm.DB) error {
 
 // internalAuthMiddleware 内部 API 鉴权中间件
 func internalAuthMiddleware() gin.HandlerFunc {
-	internalSecret := getEnv("INTERNAL_API_SECRET", "internal-secret-key")
+	internalSecret := getEnv("INTERNAL_API_SECRET", "")
+	if internalSecret == "" {
+		log.Fatal("INTERNAL_API_SECRET environment variable is required. Please set it in .env file.")
+	}
 	return func(c *gin.Context) {
 		secret := c.GetHeader("X-Internal-Secret")
 		if secret != internalSecret {

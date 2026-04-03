@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
+	"sec-chat/auth-service/internal/middleware"
 	"sec-chat/auth-service/internal/repository"
 	"sec-chat/auth-service/internal/service"
 )
@@ -48,30 +47,7 @@ type SignalingBroadcast struct {
 var signalingUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-
-		// 允许空origin（某些客户端如桌面应用、Postman等）
-		if origin == "" || origin == "null" {
-			log.Printf("Signaling WebSocket connection allowed from empty/null origin")
-			return true
-		}
-
-		// 从环境变量读取允许的域名列表
-		allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
-		if allowedOriginsStr == "" {
-			// 开发环境默认值
-			allowedOriginsStr = "http://localhost:3000,http://localhost:5173"
-		}
-		allowedOrigins := strings.Split(allowedOriginsStr, ",")
-		for _, allowed := range allowedOrigins {
-			if origin == strings.TrimSpace(allowed) {
-				return true
-			}
-		}
-		log.Printf("Signaling WebSocket connection rejected from origin: %s", origin)
-		return false
-	},
+	CheckOrigin:     CheckWebSocketOrigin,
 }
 
 // NewSignalingHub 创建信令中心实例
@@ -93,7 +69,7 @@ func (h *SignalingHub) Run() {
 			h.mu.Lock()
 			h.connections[client.userID] = client
 			h.mu.Unlock()
-			log.Printf("Signaling client registered: %s", client.userID)
+			log.Printf("Signaling client registered: %s", middleware.MaskUserID(client.userID))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -102,7 +78,7 @@ func (h *SignalingHub) Run() {
 				close(client.send)
 			}
 			h.mu.Unlock()
-			log.Printf("Signaling client unregistered: %s", client.userID)
+			log.Printf("Signaling client unregistered: %s", middleware.MaskUserID(client.userID))
 
 		case broadcast := <-h.broadcast:
 			h.mu.RLock()

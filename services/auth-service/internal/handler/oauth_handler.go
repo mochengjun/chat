@@ -5,8 +5,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 
 	"sec-chat/auth-service/internal/config"
+	"sec-chat/auth-service/internal/middleware"
 	"sec-chat/auth-service/internal/repository"
 	"sec-chat/auth-service/internal/service"
 
@@ -65,7 +67,7 @@ func (h *OAuthHandler) GoogleLogin(c *gin.Context) {
 	// 获取授权URL
 	authURL := h.oauthService.GetAuthURL(state)
 	
-	log.Printf("Initiating Google OAuth login, state: %s", state)
+	log.Printf("Initiating Google OAuth login, state: %s", middleware.MaskToken(state))
 	
 	// 重定向到Google授权页面
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
@@ -86,7 +88,7 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 	state := c.Query("state")
 	errorParam := c.Query("error")
 	
-	log.Printf("Google OAuth callback received - code: %d chars, state: %s", len(code), state)
+	log.Printf("Google OAuth callback received - code length: %d, state: %s", len(code), middleware.MaskToken(state))
 	
 	// 检查是否有错误
 	if errorParam != "" {
@@ -136,11 +138,10 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 	// 设置Cookie（用于Web应用）
 	h.setAuthCookies(c, tokenResponse)
 	
-	// 重定向到前端，带上token参数
-	redirectURL := fmt.Sprintf("%s?access_token=%s&refresh_token=%s&expires_in=%d",
+	// 重定向到前端，带上token参数（不在URL中传递refresh_token）
+	redirectURL := fmt.Sprintf("%s/auth/callback?access_token=%s&expires_in=%d",
 		frontendURL,
 		tokenResponse.AccessToken,
-		tokenResponse.RefreshToken,
 		tokenResponse.ExpiresIn,
 	)
 	
@@ -291,18 +292,21 @@ func parseSameSite(sameSite string) http.SameSite {
 	}
 }
 
-// getFrontendRedirectURL 获取前端重定向URL
+// getFrontendRedirectURL 获取前端重定向URL基础路径
 func (h *OAuthHandler) getFrontendRedirectURL() string {
-	// 从配置或环境变量获取前端URL
-	// 默认为开发环境URL
-	return "http://localhost:3000/auth/callback"
+	// 从环境变量获取前端URL
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+	return frontendURL
 }
 
 // redirectWithError 重定向到前端并带上错误信息
 func (h *OAuthHandler) redirectWithError(c *gin.Context, errorCode, errorDesc string) {
 	frontendURL := h.getFrontendRedirectURL()
 	
-	redirectURL := fmt.Sprintf("%s?error=%s&error_description=%s",
+	redirectURL := fmt.Sprintf("%s/auth/callback?error=%s&error_description=%s",
 		frontendURL,
 		url.QueryEscape(errorCode),
 		url.QueryEscape(errorDesc),
