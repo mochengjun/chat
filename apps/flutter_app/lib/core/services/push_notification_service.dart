@@ -4,9 +4,13 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
+import 'app_badge_service.dart';
+import 'notification_constants.dart';
+import 'global_navigation_service.dart';
 
 /// 推送通知类型
 enum PushNotificationType {
@@ -125,10 +129,8 @@ class PushNotificationService {
   Function(PushNotificationData)? onNotificationTap;
   Function(RemoteMessage)? onForegroundMessage;
 
-  // 通知频道
-  static const String _channelId = 'sec_chat_messages';
-  static const String _channelName = 'Chat Messages';
-  static const String _channelDescription = 'Notifications for new chat messages';
+  /// 通知ID计数器
+  int _notificationIdCounter = NotificationConstants.fcmNotificationIdMin;
 
   PushNotificationService({
     required Dio dio,
@@ -146,7 +148,10 @@ class PushNotificationService {
       Future.delayed(const Duration(seconds: 3), () async {
         try {
           // 请求权限
-          await _requestPermission();
+          final permissionGranted = await _requestPermission();
+          if (!permissionGranted) {
+            debugPrint('Push notification permission not granted');
+          }
 
           // 配置 FCM 消息处理
           _configureMessageHandlers();
@@ -157,11 +162,11 @@ class PushNotificationService {
           // 监听 token 刷新
           _messaging.onTokenRefresh.listen(_onTokenRefresh);
         } catch (e) {
-          print('Push notification delayed init error: $e');
+          debugPrint('Push notification delayed init error: $e');
         }
       });
     } catch (e) {
-      print('Push notification initialize error: $e');
+      debugPrint('Push notification initialize error: $e');
     }
   }
 
@@ -184,9 +189,9 @@ class PushNotificationService {
   Future<void> _initLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     const initSettings = InitializationSettings(
@@ -199,24 +204,7 @@ class PushNotificationService {
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
-    // 创建 Android 通知频道（带声音和振动）
-    if (Platform.isAndroid) {
-      const channel = AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        description: _channelDescription,
-        importance: Importance.high,
-        playSound: true,
-        enableVibration: true,
-        enableLights: true,
-        showBadge: true,
-      );
-
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
-    }
+    // 通知频道由 LocalNotificationService 统一创建，此处不再重复创建
   }
 
   /// 配置消息处理器
@@ -246,53 +234,106 @@ class PushNotificationService {
     // 显示本地通知
     final notification = message.notification;
     if (notification != null) {
-      await _showLocalNotification(
-        title: notification.title ?? 'New Message',
-        body: notification.body ?? '',
-        payload: jsonEncode(message.data),
-      );
+      // 检查消息ID去重
+      final messageId = message.data['message_id'] as String?;
+      if (messageId != null && notificationCache.checkAndAddMessageId(messageId)) {
+        debugPrint('FCM foreground duplicate skipped: $messageId');
+        return;
+      }
+      
+      // 检查节流（按房间）
+      final roomId = message.data['room_id'] as String? ?? 'unknown';
+      if (!notificationCache.shouldThrottle(roomId)) {
+        await _showLocalNotification(
+          title: notification.title ?? 'New Message',
+          body: notification.body ?? '',
+          roomId: roomId,
+          messageId: messageId,
+          payload: jsonEncode(message.data),
+        );
+      }
     }
   }
 
   /// 处理通知点击
   void _handleNotificationTap(RemoteMessage message) {
     final data = PushNotificationData.fromMap(message.data);
+    
+    // 默认导航行为：跳转到聊天室
+    if (data.roomId != null) {
+      GlobalNavigationService.navigateToRoom(data.roomId!);
+    }
+    
+    // 调用外部回调
     onNotificationTap?.call(data);
   }
 
   /// 本地通知点击响应
   void _onNotificationResponse(NotificationResponse response) {
-    if (response.payload != null) {
+    final payload = response.payload;
+    if (payload == null) return;
+
+    debugPrint('FCM notification tapped: $payload');
+
+    try {
+      // 尝试解析为JSON（FCM格式）
       try {
-        final data = jsonDecode(response.payload!) as Map<String, dynamic>;
-        onNotificationTap?.call(PushNotificationData.fromMap(data));
-      } catch (_) {}
+        final data = jsonDecode(payload) as Map<String, dynamic>;
+        final notificationData = PushNotificationData.fromMap(data);
+        
+        // 默认导航行为
+        if (notificationData.roomId != null) {
+          GlobalNavigationService.navigateToRoom(notificationData.roomId!);
+        }
+        
+        // 调用外部回调
+        onNotificationTap?.call(notificationData);
+      } catch (_) {
+        // 尝试解析为本地通知格式: type|roomId|messageId
+        final parts = payload.split(NotificationConstants.payloadSeparator);
+        if (parts.length >= 2) {
+          final roomId = parts[1];
+          GlobalNavigationService.navigateToRoom(roomId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Handle notification response error: $e');
     }
+  }
+
+  /// 生成唯一的通知ID
+  int _generateNotificationId() {
+    _notificationIdCounter++;
+    if (_notificationIdCounter > NotificationConstants.fcmNotificationIdMax) {
+      _notificationIdCounter = NotificationConstants.fcmNotificationIdMin;
+    }
+    return _notificationIdCounter;
   }
 
   /// 显示本地通知（支持前台和后台播放声音）
   Future<void> _showLocalNotification({
     required String title,
     required String body,
+    String? roomId,
+    String? messageId,
     String? payload,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
+    final androidDetails = AndroidNotificationDetails(
+      NotificationConstants.chatMessagesChannelId,
+      NotificationConstants.chatMessagesChannelName,
+      channelDescription: NotificationConstants.chatMessagesChannelDescription,
       importance: Importance.max,
       priority: Priority.max,
       showWhen: true,
       playSound: true,
       enableVibration: true,
       enableLights: true,
-      // 确保通知会在状态栏、锁屏和后台显示
       visibility: NotificationVisibility.public,
       category: AndroidNotificationCategory.message,
-      // 后台通知配置
       fullScreenIntent: false,
       channelShowBadge: true,
       autoCancel: true,
+      groupKey: NotificationConstants.chatMessagesGroupKey,
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -303,17 +344,28 @@ class PushNotificationService {
       interruptionLevel: InterruptionLevel.timeSensitive,
     );
 
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
 
+    // 生成唯一通知ID
+    final notificationId = (messageId != null && messageId.isNotEmpty)
+        ? NotificationConstants.messageIdToNotificationId(messageId)
+        : _generateNotificationId();
+
+    // 构建payload
+    final finalPayload = payload ??
+        '${NotificationConstants.payloadTypeFcm}'
+        '${NotificationConstants.payloadSeparator}${roomId ?? ""}'
+        '${NotificationConstants.payloadSeparator}${messageId ?? ""}';
+
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      notificationId,
       title,
       body,
       details,
-      payload: payload,
+      payload: finalPayload,
     );
   }
 
@@ -325,7 +377,7 @@ class PushNotificationService {
         await _sendTokenToServer(token);
       }
     } catch (e) {
-      print('Error getting FCM token: $e');
+      debugPrint('Error getting FCM token: $e');
     }
   }
 
@@ -352,7 +404,7 @@ class PushNotificationService {
       // 保存 token 到本地
       await _storage.write(key: 'push_token', value: token);
     } catch (e) {
-      print('Error sending token to server: $e');
+      debugPrint('Error sending token to server: $e');
     }
   }
 
@@ -378,7 +430,7 @@ class PushNotificationService {
         await _storage.delete(key: 'push_token');
       }
     } catch (e) {
-      print('Error unregistering token: $e');
+      debugPrint('Error unregistering token: $e');
     }
   }
 
@@ -417,26 +469,26 @@ class PushNotificationService {
 
   /// 清除特定房间的通知
   Future<void> clearRoomNotifications(String roomId) async {
-    // 本地通知不支持按 tag 清除，需要自己管理通知 ID
+    notificationCache.clearRoomMessages(roomId);
   }
 
-  /// 设置徽章数量 (iOS)
+  /// 设置徽章数量 (iOS/Android)
   Future<void> setBadgeCount(int count) async {
-    // iOS 可以通过 flutter_app_badger 包实现
+    await appBadgeService.clearAll();
+    if (count > 0) {
+      // 由于服务是按房间管理的，这里简化处理
+    }
   }
 }
 
 /// 后台消息处理器（必须是顶级函数）
 /// 当应用在后台或被终止时，这个函数将处理收到的推送消息
-/// 重要：确保后台消息能够播放通知声音
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // 确保 Firebase 已初始化
   await Firebase.initializeApp();
   
-  print('Background message received: ${message.messageId}');
-  print('Message data: ${message.data}');
-  print('Message notification: ${message.notification?.title} - ${message.notification?.body}');
+  debugPrint('Background message received: ${message.messageId}');
 
   // 初始化本地通知插件
   final FlutterLocalNotificationsPlugin localNotifications = FlutterLocalNotificationsPlugin();
@@ -454,13 +506,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   
   await localNotifications.initialize(initSettings);
 
-  // 确保通知频道已创建（使用最高优先级确保后台声音）
+  // 确保通知频道已创建（使用统一的频道配置）
   if (Platform.isAndroid) {
-    const channel = AndroidNotificationChannel(
-      'sec_chat_messages',
-      'Chat Messages',
-      description: 'Notifications for new chat messages',
-      importance: Importance.max, // 最高优先级
+    final channel = AndroidNotificationChannel(
+      NotificationConstants.chatMessagesChannelId,
+      NotificationConstants.chatMessagesChannelName,
+      description: NotificationConstants.chatMessagesChannelDescription,
+      importance: Importance.max,
       playSound: true,
       enableVibration: true,
       enableLights: true,
@@ -475,6 +527,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // 获取通知内容
   String title = message.notification?.title ?? '新消息';
   String body = message.notification?.body ?? '';
+  String? roomId = message.data['room_id'];
+  String? messageId = message.data['message_id'];
   
   // 如果是数据消息，从 data 中提取内容
   if (message.data.isNotEmpty) {
@@ -482,45 +536,63 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     body = message.data['body'] ?? message.data['message'] ?? body;
   }
   
-  // 显示本地通知（使用最高优先级和系统声音）
-  const androidDetails = AndroidNotificationDetails(
-    'sec_chat_messages',
-    'Chat Messages',
-    channelDescription: 'Notifications for new chat messages',
+  // 构建payload
+  final payload = '${NotificationConstants.payloadTypeFcm}'
+      '${NotificationConstants.payloadSeparator}${roomId ?? ""}'
+      '${NotificationConstants.payloadSeparator}${messageId ?? ""}';
+
+  // 显示本地通知
+  final androidDetails = AndroidNotificationDetails(
+    NotificationConstants.chatMessagesChannelId,
+    NotificationConstants.chatMessagesChannelName,
+    channelDescription: NotificationConstants.chatMessagesChannelDescription,
     importance: Importance.max,
     priority: Priority.max,
     showWhen: true,
     playSound: true,
     enableVibration: true,
     enableLights: true,
+    largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
     visibility: NotificationVisibility.public,
     category: AndroidNotificationCategory.message,
-    // 后台通知特殊配置
+    styleInformation: BigTextStyleInformation(
+      body,
+      contentTitle: title,
+      summaryText: '新消息',
+    ),
     fullScreenIntent: false,
     channelShowBadge: true,
     autoCancel: true,
+    groupKey: NotificationConstants.chatMessagesGroupKey,
   );
 
   const iosDetails = DarwinNotificationDetails(
     presentAlert: true,
     presentBadge: true,
     presentSound: true,
-    sound: 'default', // 使用系统默认声音
-    interruptionLevel: InterruptionLevel.timeSensitive, // 时间敏感通知
+    sound: 'default',
+    interruptionLevel: InterruptionLevel.timeSensitive,
   );
 
-  const details = NotificationDetails(
+  final details = NotificationDetails(
     android: androidDetails,
     iOS: iosDetails,
   );
 
+  // 使用确定性通知ID实现跨通道去重
+  final notificationId = (messageId != null && messageId.isNotEmpty)
+      ? NotificationConstants.messageIdToNotificationId(messageId)
+      : DateTime.now().millisecondsSinceEpoch % 
+          (NotificationConstants.fcmNotificationIdMax - NotificationConstants.fcmNotificationIdMin) +
+          NotificationConstants.fcmNotificationIdMin;
+
   await localNotifications.show(
-    DateTime.now().millisecondsSinceEpoch.remainder(100000),
+    notificationId,
     title,
     body,
     details,
-    payload: jsonEncode(message.data),
+    payload: payload,
   );
   
-  print('Background notification shown with sound');
+  debugPrint('Background notification shown: $title');
 }

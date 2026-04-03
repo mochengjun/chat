@@ -5,6 +5,9 @@ import 'dart:ui';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import 'notification_constants.dart';
 
 /// 后台服务管理器
 /// 
@@ -110,12 +113,14 @@ class BackgroundServiceManager {
     required String title,
     required String body,
     required String roomId,
+    String? messageId,
   }) {
     if (Platform.isAndroid) {
       _service.invoke('showNotification', {
         'title': title,
         'body': body,
         'roomId': roomId,
+        'messageId': messageId,
       });
     }
   }
@@ -180,6 +185,10 @@ Future<void> _onStart(ServiceInstance service) async {
   // 这可以避免某些插件在后台隔离中的初始化问题
   DartPluginRegistrant.ensureInitialized();
 
+  // 初始化后台通知服务
+  final backgroundNotificationService = _BackgroundNotificationService();
+  await backgroundNotificationService.initialize();
+
   // 设置为前台服务
   if (service is AndroidServiceInstance) {
     try {
@@ -227,11 +236,21 @@ Future<void> _onStart(ServiceInstance service) async {
   });
 
   // 监听显示消息通知命令
-  // 注意：通知显示由主隔离处理，这里只记录日志
-  service.on('showNotification').listen((event) {
+  service.on('showNotification').listen((event) async {
     final title = event?['title'] as String? ?? '新消息';
     final body = event?['body'] as String? ?? '';
-    print('Background received notification request: $title - $body');
+    final roomId = event?['roomId'] as String? ?? '';
+    final messageId = event?['messageId'] as String?;
+    
+    print('Background received notification request: $title - $body (roomId: $roomId)');
+    
+    // 在后台隔离中显示通知
+    await backgroundNotificationService.showMessageNotification(
+      title: title,
+      body: body,
+      roomId: roomId,
+      messageId: messageId,
+    );
   });
 
   // 心跳计时器 - 保持服务活跃并打印日志
@@ -256,6 +275,143 @@ Future<bool> _onIosBackground(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
   return true;
+}
+
+/// 后台通知服务
+/// 
+/// 用于在后台隔离中显示通知
+/// 注意：此类运行在独立的Dart隔离中，不能访问主隔离的状态
+class _BackgroundNotificationService {
+  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  bool _isInitialized = false;
+  
+  /// 通知ID计数器
+  int _notificationIdCounter = NotificationConstants.backgroundNotificationIdMin;
+
+  /// 初始化通知服务
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+
+    try {
+      // Android 初始化设置
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+      );
+
+      await _notifications.initialize(initSettings);
+
+      // 创建 Android 通知频道
+      if (Platform.isAndroid) {
+        await _createNotificationChannel();
+      }
+
+      _isInitialized = true;
+      print('_BackgroundNotificationService initialized');
+    } catch (e) {
+      print('_BackgroundNotificationService initialize error: $e');
+    }
+  }
+
+  /// 创建通知频道
+  Future<void> _createNotificationChannel() async {
+    final androidPlugin = _notifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin == null) return;
+
+    // 创建聊天消息频道
+    final chatChannel = AndroidNotificationChannel(
+      NotificationConstants.chatMessagesChannelId,
+      NotificationConstants.chatMessagesChannelName,
+      description: NotificationConstants.chatMessagesChannelDescription,
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+      enableLights: true,
+    );
+    await androidPlugin.createNotificationChannel(chatChannel);
+  }
+
+  /// 生成唯一的通知ID
+  int _generateNotificationId() {
+    _notificationIdCounter++;
+    if (_notificationIdCounter > NotificationConstants.backgroundNotificationIdMax) {
+      _notificationIdCounter = NotificationConstants.backgroundNotificationIdMin;
+    }
+    return _notificationIdCounter;
+  }
+
+  /// 显示消息通知
+  Future<bool> showMessageNotification({
+    required String title,
+    required String body,
+    required String roomId,
+    String? messageId,
+  }) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+
+    if (!_isInitialized) {
+      print('_BackgroundNotificationService not initialized, cannot show notification');
+      return false;
+    }
+
+    try {
+      // Android 通知详情
+      final androidDetails = AndroidNotificationDetails(
+        NotificationConstants.chatMessagesChannelId,
+        NotificationConstants.chatMessagesChannelName,
+        channelDescription: NotificationConstants.chatMessagesChannelDescription,
+        importance: Importance.max,
+        priority: Priority.max,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+        visibility: NotificationVisibility.public,
+        category: AndroidNotificationCategory.message,
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+          summaryText: '新消息',
+        ),
+        fullScreenIntent: false,
+        channelShowBadge: true,
+        autoCancel: true,
+        groupKey: NotificationConstants.chatMessagesGroupKey,
+      );
+
+      final details = NotificationDetails(android: androidDetails);
+
+      // 使用确定性通知ID实现跨通道去重
+      final notificationId = (messageId != null && messageId.isNotEmpty)
+          ? NotificationConstants.messageIdToNotificationId(messageId)
+          : _generateNotificationId();
+
+      // 构建payload: type|roomId|messageId
+      final payload = '${NotificationConstants.payloadTypeLocal}'
+          '${NotificationConstants.payloadSeparator}$roomId'
+          '${NotificationConstants.payloadSeparator}${messageId ?? ""}';
+
+      await _notifications.show(
+        notificationId,
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+      
+      print('Background notification shown: $title - $body');
+      return true;
+    } catch (e) {
+      print('Show background notification error: $e');
+      return false;
+    }
+  }
 }
 
 /// 全局后台服务管理器实例

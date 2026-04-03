@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/room.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/member.dart';
@@ -12,7 +13,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/services/media_service.dart';
 import '../../../../core/services/notification_sound_service.dart';
 import '../../../../core/services/local_notification_service.dart';
-import '../../../../core/services/background_service.dart';
+import '../../../../core/services/notification_constants.dart';
 import '../../../../core/security/secure_storage.dart';
 
 class ChatRepositoryImpl implements ChatRepository {
@@ -26,6 +27,9 @@ class ChatRepositoryImpl implements ChatRepository {
   
   // 缓存当前用户ID，避免每次都读取存储
   String? _cachedCurrentUserId;
+  
+  /// 当前打开的房间ID（用于判断是否需要显示通知）
+  String? _currentOpenRoomId;
 
   ChatRepositoryImpl({
     required ChatRemoteDataSource remoteDataSource,
@@ -37,12 +41,23 @@ class ChatRepositoryImpl implements ChatRepository {
     _setupWebSocketListeners();
   }
 
+  /// 设置当前打开的房间（用于控制通知显示）
+  void setCurrentOpenRoom(String? roomId) {
+    _currentOpenRoomId = roomId;
+    if (roomId != null) {
+      // 进入房间时清除该房间的通知缓存
+      notificationCache.clearRoomMessages(roomId);
+    }
+  }
+
   /// 播放消息提示音并显示通知（非自己发送的消息）
   /// 
-  /// 支持前台和后台两种模式：
-  /// - 前台：播放 just_audio 自定义提示音 + 系统通知
-  /// - 后台：通过后台服务显示系统通知（系统自动播放默认声音）
-  Future<void> _playNotificationSoundIfNeeded(Message message) async {
+  /// 功能特性：
+  /// - 消息去重
+  /// - 通知节流
+  /// - 通知合并
+  /// - 当前打开的房间不显示通知
+  Future<void> _handleNewMessageNotification(Message message) async {
     try {
       // 获取当前用户ID（优先使用缓存）
       if (_cachedCurrentUserId == null) {
@@ -51,37 +66,44 @@ class ChatRepositoryImpl implements ChatRepository {
         _cachedCurrentUserId = userInfo['userId'];
       }
       
-      // 如果消息不是自己发送的，播放提示音并显示通知
-      if (_cachedCurrentUserId != null && message.senderId != _cachedCurrentUserId) {
-        final senderName = message.senderName.isNotEmpty ? message.senderName : '新消息';
-        final content = _getNotificationContent(message);
-        
-        // 尝试播放自定义提示音（前台时有效）
-        try {
-          await notificationSoundService.playMessageSound();
-        } catch (e) {
-          print('Custom notification sound failed (may be in background): $e');
-        }
-        
-        // 显示系统通知（前台和后台都有效）
-        // 后台时系统会自动播放默认通知声音
-        await localNotificationService.showMessageNotification(
-          senderName: senderName,
-          messageContent: content,
-          roomId: message.roomId,
-          messageId: message.id,
-        );
-        
-        // 同时通知后台服务（确保后台状态下也能显示通知和播放声音）
-        backgroundServiceManager.notifyNewMessage(
-          title: senderName,
-          body: content,
-          roomId: message.roomId,
-        );
+      // 检查是否是自己发送的消息
+      final isOwnMessage = _cachedCurrentUserId != null && 
+                           message.senderId == _cachedCurrentUserId;
+      
+      // 检查是否是当前打开的房间
+      final isCurrentRoom = _currentOpenRoomId == message.roomId;
+      
+      // 自己的消息或当前打开的房间不显示通知
+      if (isOwnMessage || isCurrentRoom) {
+        debugPrint('Skip notification: ownMessage=$isOwnMessage, currentRoom=$isCurrentRoom');
+        return;
+      }
+
+      final senderName = message.senderName.isNotEmpty ? message.senderName : '新消息';
+      final content = _getNotificationContent(message);
+
+      // 尝试播放自定义提示音（前台时有效）
+      try {
+        await notificationSoundService.playMessageSound();
+      } catch (e) {
+        debugPrint('Custom notification sound failed: $e');
+      }
+
+      // 显示系统通知（带节流和去重）
+      final shown = await localNotificationService.showMessageNotification(
+        senderName: senderName,
+        messageContent: content,
+        roomId: message.roomId,
+        messageId: message.id,
+      );
+
+      // 本地通知已由 localNotificationService 显示
+      // 不再通过 backgroundServiceManager 重复显示，避免同一消息产生双重通知
+      if (shown) {
+        debugPrint('Notification shown for message: ${message.id}');
       }
     } catch (e) {
-      // 静默失败，不影响消息处理
-      print('Play notification sound error: $e');
+      debugPrint('Handle notification error: $e');
     }
   }
   
@@ -108,8 +130,8 @@ class ChatRepositoryImpl implements ChatRepository {
         _messageStreamController.add(message);
         _localDataSource.cacheMessage(message);
         
-        // 播放消息提示音（非自己发送的消息）
-        await _playNotificationSoundIfNeeded(message);
+        // 处理新消息通知（带节流和去重）
+        await _handleNewMessageNotification(message);
       } else if (data['type'] == 'message_deleted') {
         // 处理消息删除事件
         final payload = data['payload'] as Map<String, dynamic>;

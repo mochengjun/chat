@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../services/notification_sound_service.dart';
@@ -124,7 +125,9 @@ class WebSocketClient {
       }
       
       _messageController.add(message);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('WebSocket message parse error: $e');
+    }
   }
 
   void _onError(dynamic error) {

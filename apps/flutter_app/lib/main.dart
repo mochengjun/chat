@@ -11,6 +11,8 @@ import 'core/services/push_notification_service.dart';
 import 'core/services/notification_sound_service.dart';
 import 'core/services/local_notification_service.dart';
 import 'core/services/background_service.dart';
+import 'core/services/app_badge_service.dart';
+import 'core/services/global_navigation_service.dart';
 
 void main() async {
   // 捕获所有同步错误
@@ -73,41 +75,52 @@ void main() async {
 
 /// 异步初始化非核心服务
 void _initializeServicesAsync(bool isMobilePlatform, bool firebaseInitialized) {
-  // 延迟更长时间，确保应用完全启动并处于前台
+  // 延迟确保应用完全启动后再初始化服务
   Future.delayed(const Duration(seconds: 2), () async {
-    // 初始化通知服务
+    // 初始化通知相关服务
     try {
       await localNotificationService.initialize();
       await notificationSoundService.initialize();
+      await appBadgeService.initialize();
+      debugPrint('[Main] Notification services initialized');
     } catch (e) {
       debugPrint('Notification service initialization failed: $e');
     }
 
-    // 仅在移动平台上初始化推送和后台服务（需要 Firebase 初始化成功后）
+    // 仅在移动平台上初始化推送和后台服务
     if (isMobilePlatform && firebaseInitialized) {
-      // 推送服务延迟初始化
-      Future.delayed(const Duration(seconds: 2), () async {
-        try {
-          if (getIt.isRegistered<PushNotificationService>()) {
-            final pushService = getIt<PushNotificationService>();
-            await pushService.initialize();
-          }
-        } catch (e) {
-          debugPrint('Push notification initialization failed: $e');
+      // 推送服务（顺序初始化，不再额外延迟）
+      try {
+        if (getIt.isRegistered<PushNotificationService>()) {
+          final pushService = getIt<PushNotificationService>();
+          
+          // 设置FCM通知点击回调
+          pushService.onNotificationTap = (data) {
+            debugPrint('FCM notification tapped: ${data.roomId}');
+            if (data.roomId != null) {
+              GlobalNavigationService.navigateToRoom(data.roomId!);
+            }
+          };
+          
+          await pushService.initialize();
+          debugPrint('[Main] Push service initialized');
         }
-      });
+      } catch (e) {
+        debugPrint('Push notification initialization failed: $e');
+      }
 
-      // 后台服务延迟更长时间初始化，避免启动时崩溃
-      Future.delayed(const Duration(seconds: 5), () async {
-        try {
-          await backgroundServiceManager.initialize();
-          await backgroundServiceManager.startService();
-          debugPrint('Background service started');
-        } catch (e) {
-          debugPrint('Background service initialization failed: $e');
-        }
-      });
+      // 后台服务（顺序初始化，不再额外延迟）
+      try {
+        await backgroundServiceManager.initialize();
+        await backgroundServiceManager.startService();
+        debugPrint('[Main] Background service started');
+      } catch (e) {
+        debugPrint('Background service initialization failed: $e');
+      }
     }
+
+    // 处理挂起的通知导航（所有服务初始化完成后）
+    GlobalNavigationService.processPendingNavigation();
   });
 }
 

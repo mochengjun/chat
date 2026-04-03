@@ -4,8 +4,10 @@ import '../../features/authentication/presentation/pages/login_page.dart';
 import '../../features/authentication/presentation/pages/register_page.dart';
 import '../../features/chat/presentation/pages/room_list_page.dart';
 import '../../features/chat/presentation/pages/chat_room_page.dart';
+import '../../core/services/global_navigation_service.dart';
 
 final appRouter = GoRouter(
+  navigatorKey: GlobalNavigationService.navigatorKey,
   initialLocation: '/login',
   routes: [
     // 认证路由

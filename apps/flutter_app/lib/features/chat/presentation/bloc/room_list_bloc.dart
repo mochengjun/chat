@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/security/secure_storage.dart';
+import '../../../../core/services/app_badge_service.dart';
 import '../../domain/entities/room.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -70,10 +71,14 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
     Emitter<RoomListState> emit,
   ) async {
     emit(const RoomListLoading());
-    
+
     try {
       await _repository.connect();
       final rooms = await _getRoomsUseCase();
+
+      // 更新桌面图标角标
+      await _updateBadgeFromRooms(rooms);
+
       emit(RoomListLoaded(rooms: _sortRooms(rooms)));
     } catch (e) {
       emit(RoomListError(message: e.toString()));
@@ -86,6 +91,10 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
   ) async {
     try {
       final rooms = await _getRoomsUseCase();
+
+      // 更新桌面图标角标
+      await _updateBadgeFromRooms(rooms);
+
       emit(RoomListLoaded(rooms: _sortRooms(rooms)));
     } catch (e) {
       final currentState = state;
@@ -150,27 +159,32 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
   ) {
     final currentState = state;
     if (currentState is! RoomListLoaded) return;
-    
+
     final message = event.message;
-    final isOwnMessage = _cachedCurrentUserId != null && 
+    final isOwnMessage = _cachedCurrentUserId != null &&
                           message.senderId == _cachedCurrentUserId;
     // 当前打开的房间不增加未读数
     final isCurrentRoom = _currentOpenRoomId == message.roomId;
-    
+
     final updatedRooms = currentState.rooms.map((room) {
       if (room.id != message.roomId) return room;
-      
+
       // 更新最后一条消息和未读数
       return room.copyWith(
         lastMessage: message,
         // 如果不是自己发的消息，且不是当前打开的房间，增加未读数
-        unreadCount: (!isOwnMessage && !isCurrentRoom) 
-            ? room.unreadCount + 1 
+        unreadCount: (!isOwnMessage && !isCurrentRoom)
+            ? room.unreadCount + 1
             : room.unreadCount,
         updatedAt: message.createdAt,
       );
     }).toList();
-    
+
+    // 更新桌面图标角标
+    if (!isOwnMessage && !isCurrentRoom) {
+      appBadgeService.incrementRoomUnread(message.roomId);
+    }
+
     emit(RoomListLoaded(rooms: _sortRooms(updatedRooms)));
   }
 
@@ -181,15 +195,18 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
   ) {
     // 更新当前打开的房间ID
     _currentOpenRoomId = event.roomId;
-    
+
     final currentState = state;
     if (currentState is! RoomListLoaded) return;
-    
+
     final updatedRooms = currentState.rooms.map((room) {
       if (room.id != event.roomId) return room;
       return room.copyWith(unreadCount: 0);
     }).toList();
-    
+
+    // 清除该房间的桌面图标角标
+    appBadgeService.clearRoomUnread(event.roomId);
+
     emit(RoomListLoaded(rooms: updatedRooms));
   }
 
@@ -269,13 +286,24 @@ class RoomListBloc extends Bloc<RoomListEvent, RoomListState> {
   List<Room> _sortRooms(List<Room> rooms) {
     final pinned = rooms.where((r) => r.isPinned).toList();
     final unpinned = rooms.where((r) => !r.isPinned).toList();
-    
+
     pinned.sort((a, b) => (b.updatedAt ?? b.createdAt)
         .compareTo(a.updatedAt ?? a.createdAt));
     unpinned.sort((a, b) => (b.updatedAt ?? b.createdAt)
         .compareTo(a.updatedAt ?? a.createdAt));
-    
+
     return [...pinned, ...unpinned];
+  }
+
+  /// 从房间列表更新桌面图标角标
+  Future<void> _updateBadgeFromRooms(List<Room> rooms) async {
+    final roomCounts = <String, int>{};
+    for (final room in rooms) {
+      if (room.unreadCount > 0) {
+        roomCounts[room.id] = room.unreadCount;
+      }
+    }
+    await appBadgeService.updateRoomCounts(roomCounts);
   }
 
   @override
