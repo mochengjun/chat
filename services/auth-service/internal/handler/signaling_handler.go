@@ -1,13 +1,14 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	"sec-chat/auth-service/internal/middleware"
@@ -18,6 +19,7 @@ import (
 // SignalingHub 信令中心
 type SignalingHub struct {
 	callService service.CallService
+	authService service.AuthService
 
 	// 用户连接映射
 	connections map[string]*SignalingClient
@@ -36,6 +38,7 @@ type SignalingClient struct {
 	userID   string
 	deviceID string
 	send     chan []byte
+	connID   string // 唯一连接标识
 }
 
 // SignalingBroadcast 信令广播
@@ -51,9 +54,10 @@ var signalingUpgrader = websocket.Upgrader{
 }
 
 // NewSignalingHub 创建信令中心实例
-func NewSignalingHub(callService service.CallService) *SignalingHub {
+func NewSignalingHub(callService service.CallService, authService service.AuthService) *SignalingHub {
 	return &SignalingHub{
 		callService: callService,
+		authService: authService,
 		connections: make(map[string]*SignalingClient),
 		register:    make(chan *SignalingClient),
 		unregister:  make(chan *SignalingClient),
@@ -101,14 +105,9 @@ func (h *SignalingHub) Run() {
 }
 
 // HandleSignaling WebSocket信令处理
+// 注意：此路由不再需要认证中间件，认证由 WebSocket 消息层处理
 func (h *SignalingHub) HandleSignaling(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	deviceID, _ := c.Get("device_id")
+	deviceID := c.Query("device_id")
 
 	conn, err := signalingUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -116,15 +115,16 @@ func (h *SignalingHub) HandleSignaling(c *gin.Context) {
 		return
 	}
 
+	connID := generateConnID()
+
 	client := &SignalingClient{
 		hub:      h,
 		conn:     conn,
-		userID:   userID.(string),
-		deviceID: deviceID.(string),
+		userID:   "", // 将在 auth 消息后设置
+		deviceID: deviceID,
 		send:     make(chan []byte, 256),
+		connID:   connID,
 	}
-
-	h.register <- client
 
 	go client.writePump()
 	go client.readPump()
@@ -165,11 +165,81 @@ func (h *SignalingHub) SendToParticipants(callID string, message *repository.Sig
 // readPump 读取消息
 func (c *SignalingClient) readPump() {
 	defer func() {
-		c.hub.unregister <- c
+		if c.userID != "" {
+			c.hub.unregister <- c
+		}
 		c.conn.Close()
 	}()
 
 	c.conn.SetReadLimit(65536)
+
+	// === 认证阶段 ===
+	// 设置认证超时
+	c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	// 等待第一条 auth 消息
+	_, message, err := c.conn.ReadMessage()
+	if err != nil {
+		log.Printf("Signaling auth read error: %v", err)
+		return
+	}
+
+	var authMsg WSMessage
+	if err := json.Unmarshal(message, &authMsg); err != nil || authMsg.Type != "auth" {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "invalid auth message"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		log.Printf("Signaling: invalid auth message format from conn=%s", c.connID[:8])
+		return
+	}
+
+	// 从 payload 提取 token
+	payload, ok := authMsg.Payload.(map[string]interface{})
+	if !ok {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "invalid payload"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		return
+	}
+
+	token, ok := payload["token"].(string)
+	if !ok || token == "" {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "missing token"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		return
+	}
+
+	// 验证 token
+	claims, err := c.hub.authService.ValidateToken(context.Background(), token)
+	if err != nil {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "invalid token"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		log.Printf("Signaling: token validation failed for conn=%s: %v", c.connID[:8], err)
+		return
+	}
+
+	c.userID = claims.UserID
+	if c.deviceID == "" {
+		c.deviceID = claims.DeviceID
+	}
+
+	// 发送认证成功消息
+	successData, _ := json.Marshal(WSMessage{
+		Type: "auth_success",
+		Payload: map[string]interface{}{
+			"user_id": middleware.MaskUserID(c.userID),
+		},
+	})
+	if err := c.conn.WriteMessage(websocket.TextMessage, successData); err != nil {
+		log.Printf("Signaling: failed to send auth_success: %v", err)
+		return
+	}
+
+	log.Printf("Signaling client authenticated: user=%s conn=%s", middleware.MaskUserID(c.userID), c.connID[:8])
+
+	// 注册到 hub
+	c.hub.register <- c
+
+	// === 正常消息循环 ===
+	// 恢复正常读取超时
 	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
 		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -311,4 +381,9 @@ func (h *SignalingHub) IsUserOnline(userID string) bool {
 	defer h.mu.RUnlock()
 	_, ok := h.connections[userID]
 	return ok
+}
+
+// generateConnID 生成唯一连接ID
+func generateConnID() string {
+	return uuid.New().String()
 }

@@ -9,40 +9,40 @@ const REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 class TokenStorageClass {
   private accessToken: string | null = null;
 
-  // 获取AccessToken（优先从内存）
+  // 获取AccessToken（优先从内存，其次从sessionStorage）
   getAccessToken(): string | null {
     if (this.accessToken) {
       return this.accessToken;
     }
-    // 降级到localStorage（页面刷新后）
-    return localStorage.getItem(TOKEN_CONFIG.ACCESS_TOKEN_KEY);
+    // 降级到sessionStorage（页面刷新后）
+    return sessionStorage.getItem(TOKEN_CONFIG.ACCESS_TOKEN_KEY);
   }
 
-  // 设置AccessToken（存内存，备份到localStorage）
+  // 设置AccessToken（存内存 + sessionStorage）
   setAccessToken(token: string): void {
     this.accessToken = token;
-    localStorage.setItem(TOKEN_CONFIG.ACCESS_TOKEN_KEY, token);
+    sessionStorage.setItem(TOKEN_CONFIG.ACCESS_TOKEN_KEY, token);
   }
 
   // 获取RefreshToken
   getRefreshToken(): string | null {
-    return localStorage.getItem(TOKEN_CONFIG.REFRESH_TOKEN_KEY);
+    return sessionStorage.getItem(TOKEN_CONFIG.REFRESH_TOKEN_KEY);
   }
 
   // 设置RefreshToken
   setRefreshToken(token: string): void {
-    localStorage.setItem(TOKEN_CONFIG.REFRESH_TOKEN_KEY, token);
+    sessionStorage.setItem(TOKEN_CONFIG.REFRESH_TOKEN_KEY, token);
   }
 
   // 设置Token过期时间（单位：秒）
   setTokenExpiry(expiresIn: number): void {
     const expiryTime = Date.now() + expiresIn * 1000;
-    localStorage.setItem(TOKEN_EXPIRY_KEY, expiryTime.toString());
+    sessionStorage.setItem(TOKEN_EXPIRY_KEY, expiryTime.toString());
   }
 
   // 获取Token过期时间戳
   getTokenExpiry(): number | null {
-    const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+    const expiry = sessionStorage.getItem(TOKEN_EXPIRY_KEY);
     return expiry ? parseInt(expiry, 10) : null;
   }
 
@@ -61,6 +61,11 @@ class TokenStorageClass {
   // 清除所有Token
   clearTokens(): void {
     this.accessToken = null;
+    // 清理sessionStorage
+    sessionStorage.removeItem(TOKEN_CONFIG.ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_CONFIG.REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_EXPIRY_KEY);
+    // 清理遗留的localStorage数据（向后兼容迁移）
     localStorage.removeItem(TOKEN_CONFIG.ACCESS_TOKEN_KEY);
     localStorage.removeItem(TOKEN_CONFIG.REFRESH_TOKEN_KEY);
     localStorage.removeItem(TOKEN_EXPIRY_KEY);

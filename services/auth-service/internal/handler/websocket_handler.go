@@ -1,9 +1,9 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
@@ -52,6 +52,7 @@ type WSHub struct {
 	leaveRoom   chan *RoomAction
 	mu          sync.RWMutex
 	chatService service.ChatService
+	authService service.AuthService
 
 	// 在线状态相关
 	offlineTimers map[string]*time.Timer // userID -> 离线延迟计时器
@@ -71,7 +72,7 @@ type RoomAction struct {
 }
 
 // NewWSHub 创建 WebSocket Hub
-func NewWSHub(chatService service.ChatService) *WSHub {
+func NewWSHub(chatService service.ChatService, authService service.AuthService) *WSHub {
 	hub := &WSHub{
 		clients:       make(map[string]map[string]*WSClient),
 		rooms:         make(map[string]map[string]map[string]*WSClient),
@@ -81,6 +82,7 @@ func NewWSHub(chatService service.ChatService) *WSHub {
 		joinRoom:      make(chan *RoomAction),
 		leaveRoom:     make(chan *RoomAction),
 		chatService:   chatService,
+		authService:   authService,
 		offlineTimers: make(map[string]*time.Timer),
 		offlineGrace:  30 * time.Second, // 30秒宽限期，处理短暂断线重连
 	}
@@ -258,13 +260,8 @@ func (h *WSHub) BroadcastToUser(userID string, msg WSMessage) {
 }
 
 // HandleWebSocket 处理 WebSocket 连接
+// 注意：此路由不再需要认证中间件，认证由 WebSocket 消息层处理
 func (h *WSHub) HandleWebSocket(c *gin.Context) {
-	userID := c.GetString("user_id")
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	// 从查询参数获取设备ID（可选）
 	deviceID := c.Query("device_id")
 
@@ -280,25 +277,11 @@ func (h *WSHub) HandleWebSocket(c *gin.Context) {
 	client := &WSClient{
 		hub:      h,
 		conn:     conn,
-		userID:   userID,
+		userID:   "", // 将在 auth 消息后设置
 		connID:   connID,
 		deviceID: deviceID,
 		send:     make(chan []byte, 256),
 		rooms:    make(map[string]bool),
-	}
-
-	h.register <- client
-
-	// 加入用户的所有房间
-	rooms, err := h.chatService.GetUserRooms(c.Request.Context(), userID)
-	if err == nil {
-		roomIDs := make([]string, 0, len(rooms))
-		for _, room := range rooms {
-			h.joinRoom <- &RoomAction{Client: client, RoomID: room.ID}
-			roomIDs = append(roomIDs, room.ID)
-		}
-		// 房间加入操作已入队，广播上线状态到用户的所有房间
-		h.broadcastPresenceToRooms(userID, roomIDs, true)
 	}
 
 	go client.writePump()
@@ -308,11 +291,93 @@ func (h *WSHub) HandleWebSocket(c *gin.Context) {
 // readPump 读取消息
 func (c *WSClient) readPump() {
 	defer func() {
-		c.hub.unregister <- c
+		if c.userID != "" {
+			c.hub.unregister <- c
+		}
 		c.conn.Close()
 	}()
 
 	c.conn.SetReadLimit(512 * 1024) // 512KB
+
+	// === 认证阶段 ===
+	// 设置认证超时
+	c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	// 等待第一条 auth 消息
+	_, message, err := c.conn.ReadMessage()
+	if err != nil {
+		log.Printf("WebSocket auth read error: %v", err)
+		return
+	}
+
+	var authMsg WSMessage
+	if err := json.Unmarshal(message, &authMsg); err != nil || authMsg.Type != "auth" {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "invalid auth message"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		log.Printf("WebSocket: invalid auth message format from conn=%s", c.connID[:8])
+		return
+	}
+
+	// 从 payload 提取 token
+	payload, ok := authMsg.Payload.(map[string]interface{})
+	if !ok {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "invalid payload"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		return
+	}
+
+	token, ok := payload["token"].(string)
+	if !ok || token == "" {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "missing token"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		return
+	}
+
+	// 验证 token
+	claims, err := c.hub.authService.ValidateToken(context.Background(), token)
+	if err != nil {
+		errData, _ := json.Marshal(WSMessage{Type: "auth_failed", Payload: "invalid token"})
+		c.conn.WriteMessage(websocket.TextMessage, errData)
+		log.Printf("WebSocket: token validation failed for conn=%s: %v", c.connID[:8], err)
+		return
+	}
+
+	c.userID = claims.UserID
+	if c.deviceID == "" {
+		c.deviceID = claims.DeviceID
+	}
+
+	// 发送认证成功消息
+	successData, _ := json.Marshal(WSMessage{
+		Type: "auth_success",
+		Payload: map[string]interface{}{
+			"user_id": middleware.MaskUserID(c.userID),
+		},
+	})
+	if err := c.conn.WriteMessage(websocket.TextMessage, successData); err != nil {
+		log.Printf("WebSocket: failed to send auth_success: %v", err)
+		return
+	}
+
+	log.Printf("WebSocket client authenticated: user=%s conn=%s", middleware.MaskUserID(c.userID), c.connID[:8])
+
+	// 注册到 hub
+	c.hub.register <- c
+
+	// 加入用户的所有房间
+	rooms, err := c.hub.chatService.GetUserRooms(context.Background(), c.userID)
+	if err == nil {
+		roomIDs := make([]string, 0, len(rooms))
+		for _, room := range rooms {
+			c.hub.joinRoom <- &RoomAction{Client: c, RoomID: room.ID}
+			roomIDs = append(roomIDs, room.ID)
+		}
+		// 房间加入操作已入队，广播上线状态到用户的所有房间
+		c.hub.broadcastPresenceToRooms(c.userID, roomIDs, true)
+	}
+
+	// === 正常消息循环 ===
+	// 恢复正常读取超时
 	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
 		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))

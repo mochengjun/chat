@@ -4,6 +4,12 @@ import type { WsMessage } from '@shared/types/api.types';
 
 type EventCallback<T = unknown> = (data: T) => void;
 
+// WebSocket 认证相关事件
+const WS_AUTH_EVENTS = {
+  AUTH_SUCCESS: 'auth_success',
+  AUTH_FAILED: 'auth_failed',
+} as const;
+
 class WebSocketClientClass {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
@@ -12,6 +18,8 @@ class WebSocketClientClass {
   private eventHandlers = new Map<string, Set<EventCallback>>();
   private messageQueue: WsMessage[] = [];
   private isConnecting = false;
+  private isAuthenticated = false;
+  private pendingMessages: WsMessage[] = [];
   private tokenProvider: (() => string | null) | null = null;
 
   // 设置Token提供者
@@ -32,11 +40,13 @@ class WebSocketClientClass {
     }
 
     this.isConnecting = true;
-    const wsUrl = `${API_CONFIG.WS_URL}?token=${token}`;
+    this.isAuthenticated = false;
+    // 不再在 URL 中传递 token，改为连接后通过消息发送
+    const wsUrl = API_CONFIG.WS_URL;
     
     try {
       this.ws = new WebSocket(wsUrl);
-      this.setupEventListeners();
+      this.setupEventListeners(token);
     } catch (error) {
       console.error('WebSocket connection error:', error);
       this.isConnecting = false;
@@ -45,22 +55,27 @@ class WebSocketClientClass {
   }
 
   // 设置WebSocket事件监听
-  private setupEventListeners(): void {
+  private setupEventListeners(token: string): void {
     if (!this.ws) return;
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('WebSocket connected, sending auth message');
       this.isConnecting = false;
       this.reconnectAttempts = 0;
-      this.startHeartbeat();
-      this.flushMessageQueue();
-      this.emit(WS_EVENTS.CONNECTED, null);
+      // 连接成功后立即发送认证消息
+      this.sendAuthMessage(token);
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
       try {
+        // 类型检查：确保消息是字符串类型
+        if (typeof event.data !== 'string') {
+          console.warn('[WebSocket] Received non-string message, ignoring');
+          return;
+        }
+
         // 后端可能会合并多条消息用换行符分隔发送，需要分割处理
-        const rawData = event.data as string;
+        const rawData = event.data;
         const messages = rawData.split('\n').filter(line => line.trim());
         
         for (const msgStr of messages) {
@@ -69,6 +84,25 @@ class WebSocketClientClass {
             
             // 处理心跳响应
             if (data.type === WS_EVENTS.PONG) {
+              continue;
+            }
+            
+            // 处理认证成功
+            if (data.type === WS_AUTH_EVENTS.AUTH_SUCCESS) {
+              console.log('WebSocket authentication successful');
+              this.isAuthenticated = true;
+              this.startHeartbeat();
+              this.flushPendingMessages();
+              this.emit(WS_EVENTS.CONNECTED, null);
+              continue;
+            }
+            
+            // 处理认证失败
+            if (data.type === WS_AUTH_EVENTS.AUTH_FAILED) {
+              console.error('WebSocket authentication failed:', data.payload);
+              this.isAuthenticated = false;
+              this.ws?.close(1008, 'Authentication failed');
+              this.emit(WS_EVENTS.ERROR, { type: 'auth_failed', payload: data.payload });
               continue;
             }
             
@@ -92,10 +126,23 @@ class WebSocketClientClass {
     this.ws.onclose = (event: CloseEvent) => {
       console.log('WebSocket closed:', event.code, event.reason);
       this.isConnecting = false;
+      this.isAuthenticated = false;
       this.stopHeartbeat();
       this.emit(WS_EVENTS.DISCONNECTED, { code: event.code, reason: event.reason });
       this.handleReconnect();
     };
+  }
+
+  // 发送认证消息
+  private sendAuthMessage(token: string): void {
+    const authMessage: WsMessage = {
+      type: 'auth',
+      payload: { token },
+      timestamp: new Date().toISOString(),
+    };
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(authMessage));
+    }
   }
 
   // 发送消息
@@ -105,6 +152,12 @@ class WebSocketClientClass {
       payload,
       timestamp: new Date().toISOString(),
     };
+
+    // 如果未认证且不是认证消息，缓存到待发送队列
+    if (!this.isAuthenticated && type !== 'auth') {
+      this.pendingMessages.push(message as WsMessage);
+      return;
+    }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
@@ -116,6 +169,12 @@ class WebSocketClientClass {
 
   // 发送消息（原始格式）
   sendRaw(message: WsMessage): void {
+    // 如果未认证且不是认证消息，缓存到待发送队列
+    if (!this.isAuthenticated && message.type !== 'auth') {
+      this.pendingMessages.push(message);
+      return;
+    }
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
@@ -154,10 +213,18 @@ class WebSocketClientClass {
 
   // 开始心跳
   private startHeartbeat(): void {
-    this.stopHeartbeat();
+    // 先确保清理旧计时器
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.send(WS_EVENTS.PING, {});
+      } else {
+        // WebSocket 不在 OPEN 状态，停止心跳
+        this.stopHeartbeat();
       }
     }, WS_CONFIG.HEARTBEAT_INTERVAL);
   }
@@ -194,10 +261,10 @@ class WebSocketClientClass {
     }, delay);
   }
 
-  // 刷新消息队列
-  private flushMessageQueue(): void {
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift();
+  // 刷新待发送消息队列（认证成功后调用）
+  private flushPendingMessages(): void {
+    while (this.pendingMessages.length > 0) {
+      const message = this.pendingMessages.shift();
       if (message && this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify(message));
       }
@@ -220,16 +287,23 @@ class WebSocketClientClass {
 
     this.reconnectAttempts = 0;
     this.messageQueue = [];
+    this.pendingMessages = [];
+    this.isAuthenticated = false;
   }
 
   // 获取连接状态
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.ws?.readyState === WebSocket.OPEN && this.isAuthenticated;
   }
 
   // 获取连接状态
   getReadyState(): number {
     return this.ws?.readyState ?? WebSocket.CLOSED;
+  }
+
+  // 获取认证状态
+  isAuthenticated_(): boolean {
+    return this.isAuthenticated;
   }
 }
 

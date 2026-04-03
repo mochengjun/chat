@@ -117,7 +117,9 @@ const cachedGet = <T>(url: string, params?: any, ttl: number = 5 * 60 * 1000): P
   // 检查缓存
   const cachedData = requestCache.get<T>(url, params);
   if (cachedData) {
-    console.log('[API] Cache hit:', url);
+    if (import.meta.env.DEV) {
+      console.log('[API] Cache hit');
+    }
     return Promise.resolve(cachedData);
   }
 

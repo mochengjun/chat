@@ -233,15 +233,21 @@ export const useAuthStore = create<AuthState>()(
         });
         
         try {
-          // 检查是否有 Google SDK
-          if (!window.google) {
-            throw new Error('Google SDK 未加载，请刷新页面重试');
+          // 校验 Google Client ID 是否已配置
+          const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+          if (!clientId || clientId === '' || clientId.includes('your-')) {
+            throw new Error('Google Client ID 未配置，请在环境变量中设置 VITE_GOOGLE_CLIENT_ID');
+          }
+
+          // 使用安全访问链检查 SDK 是否正确加载
+          if (!window.google?.accounts?.id) {
+            throw new Error('Google SDK 未正确加载，请刷新页面重试');
           }
 
           // 使用 Google One Tap 登录
           const credential = await new Promise<string>((resolve, reject) => {
             window.google!.accounts.id.initialize({
-              client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+              client_id: clientId,
               callback: (response: { credential: string }) => {
                 resolve(response.credential);
               },

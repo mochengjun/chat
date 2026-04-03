@@ -118,12 +118,12 @@ func main() {
 		log.Println("OAuth service not initialized (missing configuration)")
 	}
 
-	// 初始化 WebSocket Hub
-	wsHub := handler.NewWSHub(chatService)
+	// 初始化 WebSocket Hub（传入 authService 用于 WebSocket 认证）
+	wsHub := handler.NewWSHub(chatService, authService)
 	go wsHub.Run()
 
-	// 初始化信令 Hub (WebRTC)
-	signalingHub := handler.NewSignalingHub(callService)
+	// 初始化信令 Hub (WebRTC)（传入 authService 用于 WebSocket 认证）
+	signalingHub := handler.NewSignalingHub(callService, authService)
 	go signalingHub.Run()
 
 	// 初始化处理器
@@ -207,6 +207,12 @@ func main() {
 			}
 		}
 
+		// WebSocket 连接 - 认证由 WebSocket 消息层处理（不再通过 URL 参数）
+		v1.GET("/ws", wsHub.HandleWebSocket)
+
+		// WebRTC 信令 WebSocket - 认证由 WebSocket 消息层处理
+		v1.GET("/signaling", signalingHub.HandleSignaling)
+
 		// 需要认证的接口
 		protected := v1.Group("/")
 		protected.Use(authMiddleware.Authenticate())
@@ -268,12 +274,6 @@ func main() {
 					rooms.POST("/:roomId/read", chatHandler.MarkAsRead)
 				}
 			}
-
-			// WebSocket 连接
-			protected.GET("/ws", wsHub.HandleWebSocket)
-
-			// WebRTC 信令 WebSocket
-			protected.GET("/signaling", signalingHub.HandleSignaling)
 
 			// ====== Call API (WebRTC) ======
 			calls := protected.Group("/calls")

@@ -14,6 +14,19 @@ class RequestCache {
   private readonly storageKey = 'request_cache';
   private maxMemoryItems = 100; // 最大内存缓存项
 
+  // 敏感 URL 黑名单：不缓存到 localStorage，仅内存缓存
+  private static readonly STORAGE_BLACKLIST = [
+    '/auth/me',
+    '/chat/users/search',
+    '/chat/rooms',
+    '/admin/',
+  ];
+
+  // 检查是否为敏感 URL
+  private isSensitiveUrl(url: string): boolean {
+    return RequestCache.STORAGE_BLACKLIST.some(pattern => url.includes(pattern));
+  }
+
   constructor() {
     // 从 localStorage 恢复缓存
     this.loadFromStorage();
@@ -48,8 +61,10 @@ class RequestCache {
       }
     }
 
-    // 同时存入 localStorage（持久化）
-    this.saveToStorage(key, item);
+    // 敏感 URL 仅存入内存缓存，不持久化到 localStorage
+    if (!this.isSensitiveUrl(url)) {
+      this.saveToStorage(key, item);
+    }
   }
 
   // 获取缓存
@@ -118,8 +133,8 @@ class RequestCache {
       
       for (const [key, item] of Object.entries(cacheData)) {
         const cacheItem = item as CacheItem<any>;
-        // 只加载未过期的缓存
-        if (now - cacheItem.timestamp <= cacheItem.ttl) {
+        // 只加载未过期且非敏感 URL 的缓存
+        if (now - cacheItem.timestamp <= cacheItem.ttl && !this.isSensitiveUrl(key)) {
           this.memoryCache.set(key, cacheItem);
         }
       }

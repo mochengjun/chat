@@ -37,7 +37,8 @@ export function MainLayout() {
       cleanupWs();
       cleanupChat();
     };
-  }, [initWsListeners, initChatListeners]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 仅挂载/卸载时运行
 
   const handleLogout = async () => {
     await logout();
