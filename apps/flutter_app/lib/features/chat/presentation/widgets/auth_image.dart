@@ -105,15 +105,20 @@ class _AuthNetworkImageState extends State<AuthNetworkImage> {
     _isInitialized = false;
     try {
       _headers = await getAuthHeaders();
+      if (!mounted) return;
       _fullUrl = await getFullImageUrl(widget.imageUrl);
+      if (!mounted) return;
       _thumbnailUrl = widget.thumbnailUrl != null ? await getFullImageUrl(widget.thumbnailUrl) : null;
+      if (!mounted) return;
       _cacheKeySuffix = await _getCacheKeySuffix();
     } catch (e) {
       debugPrint('[AuthNetworkImage] _loadHeaders error: $e');
       _fullUrl = '';
     }
-    _isInitialized = true;
-    if (mounted) setState(() {});
+    if (mounted) {
+      _isInitialized = true;
+      setState(() {});
+    }
   }
 
   @override
@@ -233,7 +238,9 @@ class _AuthPhotoViewState extends State<AuthPhotoView> {
 
     try {
       _headers = await getAuthHeaders();
+      if (!mounted) return;
       _fullUrl = await getFullImageUrl(widget.imageUrl);
+      if (!mounted) return;
       _cacheKeySuffix = await _getCacheKeySuffix();
     } catch (e) {
       debugPrint('[AuthPhotoView] _loadHeaders error: $e');
