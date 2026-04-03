@@ -476,7 +476,8 @@ class PushNotificationService {
   Future<void> setBadgeCount(int count) async {
     await appBadgeService.clearAll();
     if (count > 0) {
-      // 由于服务是按房间管理的，这里简化处理
+      // 如果需要设置特定数量，可以直接更新
+      // 由于我们的服务是按房间管理的，这里简化处理
     }
   }
 }

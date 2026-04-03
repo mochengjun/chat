@@ -81,6 +81,7 @@ void _initializeServicesAsync(bool isMobilePlatform, bool firebaseInitialized) {
     try {
       await localNotificationService.initialize();
       await notificationSoundService.initialize();
+      // 初始化桌面图标角标服务
       await appBadgeService.initialize();
       debugPrint('[Main] Notification services initialized');
     } catch (e) {
